@@ -1,0 +1,35 @@
+
+> tiem-tra-may@1.0.0 test:e2e
+> playwright test
+
+[WebServer] (node:9349) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+[WebServer] (node:9362) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+[WebServer] (Use `node --trace-warnings ...` to show where the warning was created)
+
+Running 14 tests using 1 worker
+
+(node:9380) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/e2e/game.spec.ts:86:1 › real pointer gameplay, purchases, two customers, summary, upgrade, next day, IndexedDB reload (23.3s)
+  ✓   2 tests/e2e/game.spec.ts:130:3 › responsive 360x640, dialogs, assets, no overflow (3.0s)
+  ✓   3 tests/e2e/game.spec.ts:130:3 › responsive 375x667, dialogs, assets, no overflow (2.6s)
+  ✓   4 tests/e2e/game.spec.ts:130:3 › responsive 390x844, dialogs, assets, no overflow (2.9s)
+  ✓   5 tests/e2e/game.spec.ts:130:3 › responsive 412x915, dialogs, assets, no overflow (2.1s)
+  ✓   6 tests/e2e/game.spec.ts:130:3 › responsive 768x1024, dialogs, assets, no overflow (2.6s)
+  ✓   7 tests/e2e/game.spec.ts:130:3 › responsive 1366x768, dialogs, assets, no overflow (3.3s)
+  ✓   8 tests/e2e/game.spec.ts:168:1 › pause, save during drink, reload, resume and mobile repeated input (4.2s)
+  ✓   9 tests/e2e/game.spec.ts:199:1 › decoration persists; JSON export/import validates data; reset is confirmed (4.7s)
+  ✓  10 tests/e2e/game.spec.ts:240:1 › keyboard pour releases immediately and hiding tab pauses gameplay (3.5s)
+  ✓  11 tests/e2e/game.spec.ts:266:1 › complete all first-day orders and automatically close, then continue day 2 (31.7s)
+  ✓  12 tests/e2e/game.spec.ts:285:1 › real touch hold, release and rapid multitouch do not duplicate a cup (5.8s)
+BROWSER_LONG_RUN {"beforeHeap":9549408,"afterHeap":10585432,"delta":1036024,"samples":[{"day":1,"cash":350500,"served":5,"profit":105352.5},{"day":5,"cash":496500,"served":7,"profit":54210},{"day":10,"cash":839900,"served":10,"profit":72620.00000000003},{"day":20,"cash":2907700,"served":15,"profit":225005},{"day":30,"cash":6701600,"served":20,"profit":424350},{"day":35,"cash":9042000,"served":20,"profit":416356.25}]}
+  ✓  13 tests/e2e/game.spec.ts:337:1 › browser QA controller simulates 35 days with actual IndexedDB roundtrips and bounded heap (7.9s)
+  ✓  14 tests/e2e/game.spec.ts:383:1 › opening an empty shop explains missing supplies and opens inventory, then works after purchase (2.7s)
+
+  14 passed (1.7m)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

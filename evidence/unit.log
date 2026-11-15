@@ -1,0 +1,24 @@
+
+> tiem-tra-may@1.0.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/tiem-tra-may
+
+stdout | tests/engine.test.ts > persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN
+LONG_RUN [{"day":1,"money":350500,"served":5,"profit":105352.5},{"day":5,"money":496500,"served":7,"profit":54210},{"day":10,"money":839900,"served":10,"profit":72620.00000000003},{"day":20,"money":2907700,"served":15,"profit":225005},{"day":30,"money":6701600,"served":20,"profit":424350},{"day":35,"money":9042000,"served":20,"profit":416356.25}]
+
+ ✓ tests/engine.test.ts (23 tests) 3140ms
+   ✓ persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN  2982ms
+ ✓ tests/persistence.test.ts (4 tests) 57ms
+
+ Test Files  2 passed (2)
+      Tests  27 passed (27)
+   Start at  16:24:44
+   Duration  4.18s (transform 219ms, setup 0ms, collect 337ms, tests 3.20s, environment 0ms, prepare 214ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

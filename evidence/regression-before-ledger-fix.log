@@ -1,0 +1,66 @@
+
+> tiem-tra-may@1.0.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/work/tiem-tra-may
+
+ ❯ tests/engine.test.ts (23 tests | 1 failed) 896ms
+   ✓ catalog and economy > contains 36 recipes, 20 original customers and starts with 400000 2ms
+   ✓ catalog and economy > purchase has a real price and capacity; spam never creates infinite stock 2ms
+   ✓ catalog and economy > rejects unaffordable purchases 0ms
+   ✓ catalog and economy > recovers low capital through recorded debt, once per day 1ms
+   ✓ catalog and economy > expires stock and records waste 2ms
+   ✓ catalog and economy > upgrade changes actual sealing speed and costs money 0ms
+   ✓ brewing and queue > cannot deliver unfinished drinks or duplicate revenue on rapid serve 1ms
+   ✓ brewing and queue > pour follows elapsed time and stops when no pour action arrives 1ms
+   ✓ brewing and queue > cannot use exhausted cup, tea or topping 1ms
+   ✓ brewing and queue > rejects unsealed, underfilled, incomplete and topping-free cup 0ms
+   ✓ brewing and queue > scores wrong tea, wrong size, underfill, overfill and missing topping lower 1ms
+   ✓ brewing and queue > pause freezes patience and brewing, timeout does not leave a stuck customer 14ms
+   ✓ brewing and queue > trash does not refund consumed ingredients 1ms
+   ✓ brewing and queue > only generates unlocked recipes with unique IDs 1ms
+   ✓ brewing and queue > correct drink improves reputation; wrong drink earns less 3ms
+   ✓ persistence and long run > roundtrips mid-drink JSON and rejects broken/nonfinite saves 2ms
+   × persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN 815ms
+     → expected false to be true // Object.is equality
+   ✓ persistence and long run > is deterministic and bounds ledger/history growth 18ms
+   ✓ persistence and long run > checks every supply quantity is nonnegative after random actions 27ms
+   ✓ progression, staff, recovery and adversarial inputs > locked ingredients cannot be poured and orders respect purchased unlocks 0ms
+   ✓ progression, staff, recovery and adversarial inputs > staff costs daily wages and makes sealing faster 1ms
+   ✓ progression, staff, recovery and adversarial inputs > can recover from zero cash and empty stock and can end a day off 0ms
+   ✓ progression, staff, recovery and adversarial inputs > invalid sugar values, non-tea pour and NaN pour do not corrupt the cup 1ms
+ ✓ tests/persistence.test.ts (4 tests) 23ms
+
+⎯⎯⎯⎯⎯⎯⎯ Failed Tests 1 ⎯⎯⎯⎯⎯⎯⎯
+
+ FAIL  tests/engine.test.ts > persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN
+AssertionError: expected false to be true // Object.is equality
+
+- Expected
++ Received
+
+- true
++ false
+
+ ❯ tests/engine.test.ts:201:33
+    199|         });
+    200|       b.next();
+    201|       expect(validate(b.state)).toBe(true);
+       |                                 ^
+    202|     }
+    203|     console.log("LONG_RUN", JSON.stringify(snapshots));
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯[1/1]⎯
+
+
+ Test Files  1 failed | 1 passed (2)
+      Tests  1 failed | 26 passed (27)
+   Start at  15:04:11
+   Duration  1.51s (transform 132ms, setup 0ms, collect 204ms, tests 918ms, environment 0ms, prepare 112ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice
