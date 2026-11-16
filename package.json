@@ -13,7 +13,8 @@
     "preview": "vite preview --host 0.0.0.0",
     "test:smoke": "node scripts/smoke.mjs",
     "test:accounts": "playwright test --config playwright.accounts.config.ts",
-    "build:server": "esbuild src/engine.ts --bundle --format=esm --platform=neutral --outfile=supabase/functions/_shared/engine.js"
+    "build:server": "esbuild src/engine.ts --bundle --format=esm --platform=neutral --outfile=supabase/functions/_shared/engine.js",
+    "build:dashboard": "npm run build:server && esbuild supabase/functions/game/index.ts --bundle --format=esm --platform=neutral --outfile=supabase/dashboard/game.ts"
   },
   "dependencies": {
     "dexie": "^4.0.11",
