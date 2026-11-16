@@ -39,6 +39,7 @@ export function AccountPanel({
   const [name, setName] = useState("Chủ Tiệm An"),
     [message, setMessage] = useState(""),
     [busy, setBusy] = useState(false);
+  const [messageKind, setMessageKind] = useState<"info"|"error"|"success">("info");
   const [showPassword, setShowPassword] = useState(false);
   const [offline, setOffline] = useState(!navigator.onLine);
   useEffect(() => {
@@ -92,9 +93,11 @@ export function AccountPanel({
   async function perform(work: () => Promise<void>) {
     setBusy(true);
     setMessage("");
+    setMessageKind("info");
     try {
       await work();
     } catch (error) {
+      setMessageKind("error");
       setMessage(error instanceof Error ? error.message : String(error));
     } finally {
       setBusy(false);
@@ -105,6 +108,8 @@ export function AccountPanel({
   function submit(event: FormEvent) {
     event.preventDefault();
     void perform(async () => {
+      if (!accountConfigured) throw Error("Tài khoản online chưa được kết nối máy chủ. Chủ game cần hoàn tất cấu hình Supabase trước khi đăng ký hoặc đăng nhập. Bạn vẫn có thể chọn chơi trên thiết bị.");
+      if (offline) throw Error("Bạn đang mất mạng. Hãy kết nối Internet rồi thử lại.");
       if (mode === "recover") {
         await recover(email);
         setMessage(
@@ -125,16 +130,20 @@ export function AccountPanel({
       if (mode === "register") {
         const active = await signUp(email, password, name);
         if (active) {
+          setMessageKind("success");
+          setMessage("Đăng ký thành công. Đang mở tiệm của bạn…");
           await useGame.getState().enterOnline();
           onEntered?.();
         }
         setMessage(
           active
-            ? "Đã tạo tài khoản."
-            : "Hãy kiểm tra email để xác minh và tiếp tục đăng nhập. Nếu đã có tài khoản, hãy dùng Đăng nhập hoặc Quên mật khẩu.",
+            ? "Đăng ký thành công."
+            : "Đã gửi yêu cầu đăng ký. Hãy mở email xác nhận để hoàn tất, sau đó quay lại đăng nhập. Nếu đã có tài khoản, chọn Đăng nhập hoặc Quên mật khẩu.",
         );
       } else {
         await signIn(email, password);
+        setMessageKind("success");
+        setMessage("Đăng nhập thành công. Đang tải tiến trình và mở tiệm…");
         await useGame.getState().enterOnline();
         onEntered?.();
       }
@@ -177,14 +186,14 @@ export function AccountPanel({
       {fullPage && (
         <img
           className="account-host"
-          src="/assets/auth-host.webp"
-          alt="Mây chào bạn"
+          src="/assets/owner-chibi.webp"
+          alt="Chủ tiệm chibi cầm ly trà sữa"
         />
       )}
+      {message && <p role={messageKind === "error" ? "alert" : "status"} className={`account-feedback account-feedback-${messageKind}`} aria-live="polite">{message}</p>}
       {!accountConfigured && (
         <p className="account-banner config-banner">
-          Tài khoản online chưa được cấu hình. Tiến trình trên thiết bị vẫn được
-          giữ nguyên. Cần thiết lập Supabase để đăng ký và đồng bộ.
+          Đăng nhập online đang chờ kết nối máy chủ. Bản lưu trên thiết bị vẫn dùng được.
         </p>
       )}
       {offline && (
@@ -385,10 +394,17 @@ export function AccountPanel({
             )}
             <button
               className="primary account-submit"
-              disabled={busy || !accountConfigured || offline}
+              disabled={busy}
+              onClick={event => {
+                if(!accountConfigured || offline){
+                  event.preventDefault();
+                  setMessageKind("error");
+                  setMessage(!accountConfigured ? "Tài khoản online chưa được kết nối máy chủ. Chủ game cần hoàn tất cấu hình Supabase trước khi đăng ký hoặc đăng nhập. Bạn vẫn có thể chọn chơi trên thiết bị." : "Bạn đang mất mạng. Hãy kết nối Internet rồi thử lại.");
+                }
+              }}
             >
               {busy
-                ? "Đang xử lý…"
+                ? mode === "register" ? "Đang đăng ký…" : mode === "login" ? "Đang đăng nhập…" : "Đang xử lý…"
                 : {
                     login: "Đăng nhập",
                     register: "Tạo tài khoản",
@@ -410,11 +426,6 @@ export function AccountPanel({
             {mode === "login" ? "Đăng ký ngay" : "Đăng nhập"}
           </button>
         </>
-      )}
-      {message && (
-        <p role="status" className="account-banner">
-          {message}
-        </p>
       )}
       <button
         className="account-link guest-button"

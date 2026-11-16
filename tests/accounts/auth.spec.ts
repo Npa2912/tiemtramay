@@ -151,7 +151,7 @@ test("account contract: failed cloud load never enters a guest game, and wrong l
   await page.getByLabel("Email", { exact: false }).fill("missing@example.test");
   await page.getByLabel("Mật khẩu", { exact: true }).fill("wrong");
   await page.getByRole("button", { name: "Đăng nhập", exact: true }).click();
-  await expect(page.getByRole("status")).toContainText(
+  await expect(page.getByRole("alert")).toContainText(
     "Email hoặc mật khẩu chưa đúng",
   );
   await expect(page.locator(".game")).toHaveCount(0);
@@ -165,7 +165,7 @@ test("account contract: failed cloud load never enters a guest game, and wrong l
   await page
     .getByRole("button", { name: "Tạo tài khoản", exact: true })
     .click();
-  await expect(page.getByRole("status")).toContainText("chưa trùng khớp");
+  await expect(page.getByRole("alert")).toContainText("chưa trùng khớp");
   await expect(page.locator(".game")).toHaveCount(0);
   await page
     .getByLabel("Xác nhận mật khẩu", { exact: true })
@@ -220,3 +220,9 @@ for (const [width, height] of [
       ),
     ).toBe(true);
   });
+
+test('registration requiring email confirmation gives clear next steps and does not pretend the user is signed in',async({page,context})=>{
+ const backend=service();await backend.install(context);
+ await context.route('https://may-test.supabase.co/auth/v1/signup',route=>route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({user:{id:'pending-confirmation'}})}));
+ await page.goto('/');await page.getByRole('button',{name:'Đăng ký ngay',exact:true}).click();await page.getByLabel('Tên chủ quán',{exact:false}).fill('Chủ Tiệm An');await page.getByLabel('Email',{exact:false}).fill('an@example.test');await page.getByLabel('Mật khẩu',{exact:true}).fill('TiemTraMay123!');await page.getByLabel('Xác nhận mật khẩu',{exact:true}).fill('TiemTraMay123!');await page.getByRole('button',{name:'Tạo tài khoản',exact:true}).click();await expect(page.getByRole('status')).toContainText('Đã gửi yêu cầu đăng ký');await expect(page.getByRole('status')).toContainText('email xác nhận');await expect(page.locator('.game')).toHaveCount(0);
+});

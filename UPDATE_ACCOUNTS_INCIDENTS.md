@@ -64,3 +64,11 @@ Các kết quả cuối và ảnh được ghi trong `evidence/account-incidents
 Đã sửa lỗi thông báo sự cố che nút kết sổ/đóng modal trong lần kiểm thử đầu. Thông báo hiện ở vùng lời chào, dưới modal và không chặn thao tác qua phần chữ. Đã bổ sung cách thu hồi qua camera trong Sự kiện sau khi người chơi đóng thông báo.
 
 Chưa kiểm thử Supabase thật, email thật, SQL/RLS trên project thật hoặc deploy Vercel vì môi trường không có cấu hình/quyền truy cập các dịch vụ đó. Không coi các test mô phỏng là bằng chứng triển khai online thành công.
+
+## Ảnh chủ tiệm và phản hồi đăng nhập
+
+Đã thay nhân vật trên trang tài khoản bằng chibi chủ tiệm cầm trà sữa tại `public/assets/owner-chibi.webp`, dùng ảnh do người dùng yêu cầu tạo. Ảnh nền trong suốt, tối ưu WebP; ảnh màn hình đăng nhập/đăng ký đã được cập nhật.
+
+Đã sửa nút đăng nhập/đăng ký không phản hồi khi thiếu Supabase: nút không còn bị vô hiệu hóa âm thầm, bấm sẽ hiện giải thích rõ trong thẻ form. Có trạng thái đang đăng nhập/đăng ký, thông báo xác nhận email, lỗi rõ ràng và tự mở game khi xác thực và tải save server đều thành công. Không tạo tài khoản giả trên localStorage hoặc hiển thị đăng ký thành công khi dịch vụ chưa cấu hình.
+
+Xác minh bản sửa: 7/7 E2E tài khoản với server mô phỏng, 1/1 E2E khi chưa cấu hình, typecheck, lint và production build đạt. Log ở `evidence/owner-login/`. Chưa có Supabase project/configuration trong môi trường để kiểm thử đăng ký/email/đồng bộ trên dịch vụ thật; chủ game cần tạo project, chạy migration/function và điền `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY` trên Vercel theo `docs/ACCOUNTS.md` rồi redeploy.

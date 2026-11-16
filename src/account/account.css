@@ -16,3 +16,4 @@
 .account-stat-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin: 16px 0; }
 .account-stat-grid span { background: #ffead7; padding: 12px; border-radius: 12px; font-size: 11px; }
 .account-stat-grid b { display: block; margin-top: 5px; font-size: 13px; overflow-wrap: anywhere; }
+.account-feedback{padding:10px 12px;border:1px solid #cfaa7a;border-radius:12px;font-size:12px;line-height:1.5;background:#fff4d9;overflow-wrap:anywhere;margin:8px 0 12px;scroll-margin:20px}.account-feedback-error{border-color:#da8f8d;background:#fff0eb;color:#983c36}.account-feedback-success{border-color:#8fb96e;background:#eff8e3;color:#3c652e}.account-full .account-feedback{font-size:11px;padding:9px;line-height:1.5}
