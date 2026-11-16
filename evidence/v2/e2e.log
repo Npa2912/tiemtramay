@@ -1,0 +1,37 @@
+
+Running 24 tests using 1 worker
+
+(node:11088) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/e2e/game.spec.ts:86:1 › real pointer gameplay, purchases, two customers, summary, upgrade, next day, IndexedDB reload (18.8s)
+  ✓   2 tests/e2e/game.spec.ts:130:3 › responsive 360x640, dialogs, assets, no overflow (3.0s)
+  ✓   3 tests/e2e/game.spec.ts:130:3 › responsive 375x667, dialogs, assets, no overflow (3.0s)
+  ✓   4 tests/e2e/game.spec.ts:130:3 › responsive 390x844, dialogs, assets, no overflow (4.1s)
+  ✓   5 tests/e2e/game.spec.ts:130:3 › responsive 412x915, dialogs, assets, no overflow (2.8s)
+  ✓   6 tests/e2e/game.spec.ts:130:3 › responsive 768x1024, dialogs, assets, no overflow (3.1s)
+  ✓   7 tests/e2e/game.spec.ts:130:3 › responsive 1366x768, dialogs, assets, no overflow (3.5s)
+  ✓   8 tests/e2e/game.spec.ts:174:1 › pause, save during drink, reload, resume and mobile repeated input (4.5s)
+  ✓   9 tests/e2e/game.spec.ts:205:1 › decoration persists; JSON export/import validates data; reset is confirmed (4.5s)
+  ✓  10 tests/e2e/game.spec.ts:246:1 › keyboard pour releases immediately and hiding tab pauses gameplay (3.5s)
+  ✓  11 tests/e2e/game.spec.ts:272:1 › complete all first-day orders and automatically close, then continue day 2 (31.4s)
+  ✓  12 tests/e2e/game.spec.ts:291:1 › real touch hold, release and rapid multitouch do not duplicate a cup (5.2s)
+BROWSER_LONG_RUN {"beforeHeap":5861832,"afterHeap":11011048,"delta":5149216,"samples":[{"day":1,"cash":950500,"served":5,"profit":105735},{"day":5,"cash":1096500,"served":7,"profit":48722.5},{"day":10,"cash":1441800,"served":10,"profit":71105},{"day":20,"cash":3460300,"served":15,"profit":224321.25},{"day":30,"cash":7189500,"served":20,"profit":426012.5},{"day":35,"cash":9538700,"served":20,"profit":432742.5}]}
+  ✓  13 tests/e2e/game.spec.ts:343:1 › browser QA controller simulates 35 days with actual IndexedDB roundtrips and bounded heap (6.6s)
+  ✓  14 tests/e2e/game.spec.ts:389:1 › opening an empty shop explains missing supplies and opens inventory, then works after purchase (2.9s)
+  ✓  15 tests/e2e/opening.spec.ts:2:1 › day 2 with 40 portions of each tea and no pearls opens only after buying pearls (4.4s)
+  ✓  16 tests/e2e/v2.spec.ts:11:3 › 2.0 viewport 360x800: no page scroll, usable navigation and real game screenshot (6.4s)
+  ✓  17 tests/e2e/v2.spec.ts:11:3 › 2.0 viewport 390x844: no page scroll, usable navigation and real game screenshot (6.3s)
+  ✓  18 tests/e2e/v2.spec.ts:11:3 › 2.0 viewport 430x932: no page scroll, usable navigation and real game screenshot (6.2s)
+  ✓  19 tests/e2e/v2.spec.ts:11:3 › 2.0 viewport 768x1024: no page scroll, usable navigation and real game screenshot (6.1s)
+  ✓  20 tests/e2e/v2.spec.ts:11:3 › 2.0 viewport 1440x900: no page scroll, usable navigation and real game screenshot (6.7s)
+  ✓  21 tests/e2e/v2.spec.ts:59:1 › 2.0 selecting a queued order uses the actual order and never swaps a cup (2.2s)
+  ✓  22 tests/e2e/v2.spec.ts:81:1 › 2.0 quest rewards and staff training change state once and survive reload (4.0s)
+  ✓  23 tests/e2e/v2.spec.ts:116:1 › 2.0 a naturally generated event resolves through its real UI and is recorded (1.4s)
+  ✓  24 tests/e2e/v2.spec.ts:140:1 › 2.0 enlarged brewing controls are usable on mobile and preserve the cup (2.5s)
+
+  24 passed (2.4m)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

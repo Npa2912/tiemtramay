@@ -1,7 +1,9 @@
 import Dexie, { type Table } from "dexie";
 import { initial, validate, type State } from "./engine";
+import { migrateProgression } from "./progression";
 class SaveDB extends Dexie {
   saves!: Table<{ id: string; data: State }, string>;
+  backups!: Table<{ id: string; data: State }, string>;
   constructor() {
     super("TiemTraMay");
     this.version(1).stores({ saves: "id" });
@@ -21,6 +23,7 @@ class SaveDB extends Dexie {
             }
           }),
       );
+    this.version(3).stores({ saves: "id", backups: "id" });
   }
 }
 export const db = new SaveDB();
@@ -41,11 +44,16 @@ export async function load() {
   if (!row) return initial();
   if (!validate(row.data))
     throw Error("Bản lưu không hợp lệ. Hãy nhập một bản JSON dự phòng.");
+  if (!row.data.progression) {
+    // Keep the original before adding the optional 2.0 progression schema.
+    if (!(await db.backups.get("before-v2"))) await db.backups.put({ id: "before-v2", data: structuredClone(row.data) });
+    return migrateProgression(row.data);
+  }
   return row.data;
 }
 export function parseSave(text: string) {
   const value: unknown = JSON.parse(text);
   if (!validate(value))
     throw Error("File save sai cấu trúc hoặc chứa dữ liệu không hợp lệ.");
-  return value;
+  return migrateProgression(value);
 }

@@ -145,10 +145,11 @@ for (const [width, height] of [
     ).toBe(true);
     for (const text of [
       "Kho",
-      "Công thức",
       "Nâng cấp",
       "Trang trí",
-      "Cài đặt",
+      "Nhân viên",
+      "Sự kiện",
+      "Thành tựu",
     ]) {
       await page
         .getByRole("navigation")
@@ -159,6 +160,11 @@ for (const [width, height] of [
       await expect(close).toBeInViewport();
       await close.click();
     }
+    await page.getByRole("button", { name: "Cài đặt", exact: true }).click();
+    await expect(page.getByRole("dialog")).toBeVisible();
+    await page.getByRole("button", { name: "Sổ công thức", exact: true }).click();
+    await expect(page.locator(".recipe-card")).toHaveCount(36);
+    await page.getByRole("button", { name: "Đóng cửa sổ" }).click();
     await page.screenshot({
       path: `screenshots/${width}x${height}.png`,
       fullPage: true,
@@ -388,7 +394,7 @@ test("opening an empty shop explains missing supplies and opens inventory, then 
   await expect(page.getByRole("dialog", { name: "kho" })).toBeVisible();
   await expect(page.getByRole("alert")).toContainText("Để mở cửa, cần nhập");
   await expect(page.locator(".modal-footer")).toContainText("Chưa thể mở cửa");
-  await expect(page.locator(".wallet b")).toHaveText("400.000đ");
+  await expect(page.locator(".wallet b")).toHaveText("1.000.000đ");
   await page.screenshot({
     path: "screenshots/open-empty-shop-guidance.png",
     fullPage: true,

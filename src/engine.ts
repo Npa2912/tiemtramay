@@ -1,3 +1,4 @@
+import { createProgression, applyProgression, reduceProgression, validProgression, type Progression, type ProgressionAction } from "./progression";
 import {
   customers,
   recipes,
@@ -57,6 +58,7 @@ export interface Feedback {
 }
 export interface State {
   feedback: Feedback | null;
+  progression?: Progression;
   version: 2;
   day: number;
   money: number;
@@ -82,7 +84,8 @@ export interface State {
   tutorial: boolean;
   sound: boolean;
 }
-export type Action =
+export type Action = ProgressionAction
+  | { type: "selectOrder"; id: number }
   | { type: "buy"; id: string }
   | { type: "upgrade"; id: string }
   | { type: "decor"; id: string; value: number }
@@ -130,9 +133,10 @@ export function missingOpeningSupplies(s: State) {
 export function initial(seed = 4271): State {
   const s: State = {
     feedback: null,
+    progression: createProgression(),
     version: 2,
     day: 1,
-    money: 400000,
+    money: 1000000,
     debt: 0,
     creditDay: 0,
     reputation: 4.5,
@@ -189,6 +193,17 @@ function random(s: State) {
   s.seed = (Math.imul(1664525, s.seed) + 1013904223) >>> 0;
   return s.seed / 4294967296;
 }
+export function recipeNeeds(r: Recipe) {
+  const needs: Record<string, number> = { [r.tea]: 0.85 * (r.size === "L" ? 1.5 : 1), [r.topping]: 1, [`cup${r.size}`]: 1, lid: 1, sugar: r.sugar / 100, ice: r.ice / 100 };
+  if (r.tea === "milk") needs.milkPowder = needs[r.tea] * 0.3;
+  if (r.flavor !== "plain") needs[r.flavor] = 1;
+  return needs;
+}
+function canQueue(s: State, recipe: Recipe) {
+  const reserved: Record<string, number> = {};
+  for (const order of s.orders) for (const [id, qty] of Object.entries(recipeNeeds(order.recipe))) reserved[id] = (reserved[id] || 0) + qty;
+  return Object.entries(recipeNeeds(recipe)).every(([id, qty]) => quantity(s, id) + 1e-7 >= qty + (reserved[id] || 0));
+}
 function enqueue(s: State) {
   while (s.orders.length < 3 && s.generated < s.target) {
     const available = recipes.filter(
@@ -197,16 +212,18 @@ function enqueue(s: State) {
         unlocked(s, r.tea) &&
         unlocked(s, r.topping) &&
         unlocked(s, r.flavor) &&
-        (r.size === "M" || s.upgrades.size),
+        (r.size === "M" || s.upgrades.size) && canQueue(s, r),
     );
+    if (!available.length) break;
     let recipe = { ...available[Math.floor(random(s) * available.length)] };
     if (s.day < 3) {
       recipe.sugar = 70;
       recipe.ice = 50;
     }
-    const customer = Math.floor(random(s) * 20);
+    let draw = random(s) * customers.reduce((sum, c) => sum + c.frequency, 0);
+    const customer = customers.findIndex(c => (draw -= c.frequency) <= 0);
     const favorite = available.filter(
-      (r) => r.tea === customers[customer].preference,
+      (r) => r.tea === customers[customer].preference && r.price <= customers[customer].budget,
     );
     if (favorite.length && random(s) < 0.45)
       recipe = { ...favorite[Math.floor(random(s) * favorite.length)] };
@@ -267,7 +284,12 @@ export function quality(c: Cup, r: Recipe) {
   if (c.ice !== r.ice) score -= 0.1;
   return Math.max(0, score);
 }
+const progressionActions = new Set(["eventChoice", "hire", "train", "staffAssign", "security", "claimQuest", "ownerName", "reducedMotion"]);
 export function reduce(input: State, a: Action): State {
+  if (progressionActions.has(a.type)) return reduceProgression(input, a as ProgressionAction);
+  return applyProgression(input, reduceCore(input, a), a);
+}
+function reduceCore(input: State, a: Action): State {
   if (a.type === "tick" && (input.phase !== "open" || input.paused))
     return input;
   const s = structuredClone(input);
@@ -288,6 +310,12 @@ export function reduce(input: State, a: Action): State {
     return s;
   }
   if (s.paused) return s;
+  if (a.type === "selectOrder") {
+    if (s.phase !== "open" || s.cup) return say("Hoàn thành hoặc bỏ ly đang pha trước khi đổi đơn.");
+    const index = s.orders.findIndex(o => o.id === a.id);
+    if (index > 0) s.orders.unshift(...s.orders.splice(index, 1));
+    return s;
+  }
   if (a.type === "credit") {
     if (s.money < 20000 && s.creditDay !== s.day) {
       s.creditDay = s.day;
@@ -563,6 +591,7 @@ export function validate(value: unknown): value is State {
   if (!value || typeof value !== "object") return false;
   const s = value as State;
   try {
+    if (s.progression !== undefined && !validProgression(s.progression)) return false;
     if (
       s.version !== 2 ||
       !integer(s.day, 1) ||

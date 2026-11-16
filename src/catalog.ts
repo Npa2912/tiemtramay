@@ -151,15 +151,158 @@ const names = [
   "Trâm",
   "Vy",
 ];
-export const customers = names.map((name, i) => ({
-  id: i,
-  name,
-  avatar: `/assets/customer-${i}.svg`,
-  personality: ["Dễ thương", "Khách quen", "Khó tính", "VIP"][i % 4],
-  patience: 105 + (i % 5) * 12,
-  strictness: i % 4 === 2 ? 1.2 : 1,
-  preference: teas[i % 6].id,
-}));
+// Twenty original portraits, sixteen customer archetypes. VIP slots remain stable for
+// existing saves: order.customer continues to index the same named person/avatar.
+const customerArchetypes = [
+  {
+    name: "Học sinh",
+    dialogue: "Cho mình một ly trước giờ vào lớp nhé!",
+    sugar: 70,
+    budget: 40000,
+    frequency: 1.3,
+  },
+  {
+    name: "Sinh viên",
+    dialogue: "Một chút trà cho buổi học nhóm hôm nay.",
+    sugar: 50,
+    budget: 45000,
+    frequency: 1.4,
+  },
+  {
+    name: "Nhân viên văn phòng",
+    dialogue: "Mình tranh thủ ghé trong giờ nghỉ.",
+    sugar: 30,
+    budget: 50000,
+    frequency: 1.2,
+  },
+  {
+    name: "Khách du lịch",
+    dialogue: "Tiệm xinh quá, món nào là đặc trưng vậy?",
+    sugar: 70,
+    budget: 60000,
+    frequency: 0.8,
+  },
+  {
+    name: "Người cao tuổi",
+    dialogue: "Cháu pha vị thanh nhẹ giúp cô nhé.",
+    sugar: 30,
+    budget: 45000,
+    frequency: 0.7,
+  },
+  {
+    name: "Khách quen",
+    dialogue: "Mây ơi, hôm nay tiệm mình có gì mới?",
+    sugar: 50,
+    budget: 50000,
+    frequency: 1.3,
+  },
+  {
+    name: "Khách khó tính",
+    dialogue: "Mình thích đúng vị ghi trong đơn nhé.",
+    sugar: 30,
+    budget: 60000,
+    frequency: 0.8,
+  },
+  {
+    name: "Khách thích ngọt",
+    dialogue: "Hôm nay mình muốn một chút ngọt ngào!",
+    sugar: 100,
+    budget: 45000,
+    frequency: 1,
+  },
+  {
+    name: "Khách ít đường",
+    dialogue: "Ít đường giúp mình nhé, cảm ơn Mây.",
+    sugar: 30,
+    budget: 45000,
+    frequency: 1,
+  },
+  {
+    name: "Khách mang đi",
+    dialogue: "Mình mang đi, nhớ dán nắp thật kín nha.",
+    sugar: 50,
+    budget: 50000,
+    frequency: 1.1,
+  },
+  {
+    name: "Khách đi theo nhóm",
+    dialogue: "Cả nhóm sẽ lần lượt gọi món nhé!",
+    sugar: 70,
+    budget: 70000,
+    frequency: 0.7,
+  },
+  {
+    name: "Khách vội",
+    dialogue: "Mình sắp tới giờ xe chạy rồi.",
+    sugar: 50,
+    budget: 55000,
+    frequency: 0.8,
+  },
+  {
+    name: "Người khám phá vị mới",
+    dialogue: "Mình muốn thử công thức mới nhất của Mây.",
+    sugar: 30,
+    budget: 65000,
+    frequency: 1,
+  },
+  {
+    name: "Khách ngày hội",
+    dialogue: "Ngày hội thật vui, mình ghé ủng hộ tiệm!",
+    sugar: 70,
+    budget: 60000,
+    frequency: 0.6,
+  },
+  {
+    name: "Người yêu trà",
+    dialogue: "Hương trà ở đây làm mình nhớ quê nhà.",
+    sugar: 30,
+    budget: 70000,
+    frequency: 0.9,
+  },
+];
+let ordinaryCustomerIndex = 0;
+export const customers = names.map((name, i) => {
+  const vip = i % 4 === 3;
+  const archetype = vip
+    ? {
+        name: "VIP",
+        dialogue: "Mình nghe nhiều lời khen về tiệm Mây.",
+        sugar: 50,
+        budget: 100000,
+        frequency: 0.45,
+      }
+    : customerArchetypes[ordinaryCustomerIndex++];
+  return {
+    id: i,
+    name,
+    avatar: `/assets/customer-${i}.svg`,
+    personality: archetype.name,
+    dialogue: archetype.dialogue,
+    patience: 105 + (i % 5) * 12,
+    strictness: i % 4 === 2 ? 1.2 : 1,
+    preference: teas[i % 6].id,
+    preferredSugar: archetype.sugar,
+    budget: archetype.budget,
+    frequency: archetype.frequency,
+    relationshipMilestones: [
+      {
+        visits: 3,
+        name: "Một gương mặt quen",
+        story: `${name} đã nhớ góc quầy và nụ cười của Mây.`,
+      },
+      {
+        visits: 10,
+        name: "Người bạn của tiệm",
+        story: `${name} thường kể chuyện trong ngày khi ghé uống trà.`,
+      },
+      {
+        visits: 25,
+        name: "Một phần khu phố",
+        story: `Với ${name}, tiệm Mây đã trở thành một nơi thân thuộc.`,
+      },
+    ],
+  };
+});
 export interface Recipe {
   id: string;
   tea: string;

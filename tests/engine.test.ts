@@ -11,16 +11,16 @@ import {
 import { Bot } from "../src/qa/bot";
 import { recipes, customers, supplies } from "../src/catalog";
 describe("catalog and economy", () => {
-  it("contains 36 recipes, 20 original customers and starts with 400000", () => {
+  it("contains 36 recipes, 20 original customers and starts with 1000000", () => {
     expect(recipes).toHaveLength(36);
     expect(customers).toHaveLength(20);
-    expect(initial().money).toBe(400000);
+    expect(initial().money).toBe(1000000);
   });
   it("purchase has a real price and capacity; spam never creates infinite stock", () => {
     let s = initial();
     for (let i = 0; i < 100; i++) s = reduce(s, { type: "buy", id: "milk" });
     expect(quantity(s, "milk")).toBe(40);
-    expect(s.money).toBe(304000);
+    expect(s.money).toBe(904000);
   });
   it("rejects unaffordable purchases", () => {
     const s = initial();

@@ -15,6 +15,8 @@ class CounterScene extends Phaser.Scene {
   create() {
     this.add.image(210, 185, "shop");
     this.ink = this.add.graphics();
+    this.cameras.main.setZoom(1.35);
+    this.cameras.main.centerOn(205, 230);
   }
   update(_time: number, delta: number) {
     if (!this.ink) return;

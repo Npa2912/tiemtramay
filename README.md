@@ -1,6 +1,13 @@
-# Tiệm Trà Mây
+# Tiệm Trà Mây 2.0
 
-Game single-player tiếng Việt, React 19 + TypeScript + Vite + Phaser 3. Zustand quản lý trạng thái, Dexie lưu IndexedDB. Không backend, không CDN lúc chơi, không API key.
+Giao diện một màn hình, hình Mây và ly trà SVG gốc, 12 sự kiện, 5 vai trò nhân viên, 30 nhiệm vụ chính, 50 nhiệm vụ phụ và 20 thành tựu. Bản lưu cũ được giữ số dư và sao lưu trước khi bổ sung tiến trình mới. Game mới bắt đầu với **1.000.000đ**.
+
+- [Báo cáo kiểm thử 2.0](V2_QA_REPORT.md) và [hướng dẫn triển khai](V2_DEPLOYMENT.md).
+- [Thiết lập tài khoản Supabase](docs/ACCOUNTS.md): cần cấu hình, migration và Edge Function trước khi dùng online. Tài khoản/đồng bộ thực tế chưa được xác minh khi chưa có dự án thử nghiệm.
+- [Ảnh điện thoại](screenshots/v2-390x844.png) và [ảnh desktop](screenshots/v2-1440x900.png).
+
+
+Game single-player tiếng Việt, React 19 + TypeScript + Vite + Phaser 3. Zustand quản lý trạng thái, Dexie lưu IndexedDB. Chế độ trên thiết bị không cần backend hoặc API key; chế độ tài khoản online dùng Supabase khi được cấu hình. Không dùng CDN lúc chơi.
 
 ## Chạy trong VS Code
 
@@ -15,7 +22,7 @@ Mở địa chỉ Vite in ra (thường `http://localhost:5173`). Bản producti
 
 ## Chơi
 
-1. Nếu bấm Mở cửa khi thiếu hàng, game sẽ mở Kho và liệt kê chính xác vật tư cần nhập. Ngày đầu mở Kho, mua mỗi loại một gói: trà sữa, hồng trà, sữa, đường, đá, trân châu, ly M, nắp. Tổng 178.000đ; vốn ban đầu 400.000đ.
+1. Nếu bấm Mở cửa khi thiếu hàng, game sẽ mở Kho và liệt kê chính xác vật tư cần nhập. Ngày đầu mở Kho, mua mỗi loại một gói: trà sữa, hồng trà, sữa, đường, đá, trân châu, ly M, nắp. Tổng 178.000đ; vốn ban đầu 1.000.000đ.
 2. Đóng Kho, mở tiệm. Đọc loại trà, size, topping, hương, đường, đá trong đơn khách.
 3. Chọn ly, chọn bình, **nhấn giữ** “Giữ để rót”. Thả ở **77–93%**, lý tưởng 85%. Cảm ứng và bàn phím Space/Enter đều được hỗ trợ. Chỉ chọn bình không tự rót.
 4. Thêm topping, chọn hương (kể cả Nguyên vị), chọn đường và đá. Dán nắp, chờ máy hoàn tất rồi giao.
@@ -73,4 +80,4 @@ Chỉ bản dev có `?qa=1` mới nạp `window.mayQA`. Có reset(seed), act(act
 
 ## Phạm vi và giới hạn
 
-Đọc trạng thái chính thức và chi tiết còn thiếu trong QA_REPORT.md. Không có ảnh tham chiếu trong tệp yêu cầu nên không thể đối chiếu ảnh với game tham khảo. Giao diện ưu tiên dọc nhưng có cuộn trên màn hình thấp; chưa đạt trải nghiệm quầy vừa hoàn toàn trong một khung 9:16 ở mọi kích thước. Chưa chứng nhận Android/iOS vật lý, Safari hoặc khả năng chơi offline khi chưa từng tải trang. Không có service worker. Cân bằng kinh tế đang khá dễ khi bot phục vụ hoàn hảo; cần playtest con người trước phát hành thương mại.
+Đọc trạng thái chính thức và chi tiết còn thiếu trong QA_REPORT.md. Không có ảnh tham chiếu trong tệp yêu cầu nên không thể đối chiếu ảnh với game tham khảo. Giao diện 2.0 ưu tiên dọc, màn hình chính không cuộn; bản 2.0 dùng khung vừa viewport và bảng lựa chọn phóng to cho điện thoại; xem kết quả và giới hạn thực tế trong V2_QA_REPORT.md. Chưa chứng nhận Android/iOS vật lý, Safari hoặc khả năng chơi offline khi chưa từng tải trang. Không có service worker. Cân bằng kinh tế đang khá dễ khi bot phục vụ hoàn hảo; cần playtest con người trước phát hành thương mại.

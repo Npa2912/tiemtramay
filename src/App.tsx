@@ -1,5 +1,8 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Counter } from "./Counter";
+import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
+const Counter = lazy(() => import("./Counter").then(module => ({ default: module.Counter })));
+import { BrewOptions } from "./BrewOptions";
+import { ProgressionPanel } from "./ProgressionPanel";
+import { AccountPanel } from "./account/AccountPanel";
 import { useGame, flushSave } from "./store";
 import {
   customers,
@@ -23,7 +26,7 @@ import {
 import { parseSave } from "./persistence";
 import { effect, setMusic } from "./audio";
 type Panel =
-  "kho" | "recipe" | "upgrade" | "decor" | "report" | "settings" | null;
+  "kho" | "recipe" | "upgrade" | "decor" | "report" | "settings" | "events" | "staff" | "quests" | "achievements" | "account" | "brew" | null;
 function Icon({ name }: { name: string }) {
   const paths: Record<string, ReactNode> = {
     cup: (
@@ -78,8 +81,8 @@ function Icon({ name }: { name: string }) {
   );
 }
 export default function App() {
-  const { game: s, act, ready, error } = useGame();
-  const [panel, setPanel] = useState<Panel>(null),
+  const { game: s, act, ready, error, online } = useGame();
+  const [panel, setPanel] = useState<Panel>(location.hash.includes("access_token") ? "account" : null),
     [tea, setTea] = useState("milk"),
     [notice, setNotice] = useState(""),
     [confirmReset, setConfirmReset] = useState(false);
@@ -175,32 +178,9 @@ export default function App() {
     );
   return (
     <div className="world">
-      <aside className="editorial">
-        <span className="eyebrow">MỘT GÓC NHỎ, MỘT NIỀM VUI</span>
-        <img className="cloud-logo" src="/assets/cloud.svg" alt="Mây" />
-        <h1>
-          Tiệm Trà
-          <br />
-          <em>Mây</em>
-        </h1>
-        <p>
-          Thêm một chút trà,
-          <br />
-          thêm một ngày dịu dàng.
-        </p>
-        <div className="desk-note">
-          <span>GỬI CHỦ TIỆM</span>
-          <p>
-            Đọc đơn thật kỹ. Rót đến vạch xanh.
-            <br />
-            Và đừng quên một chút ngọt ngào.
-          </p>
-          <b>Chúc tiệm mình đông khách!</b>
-        </div>
-        <small>ARTWORK GỐC · CHƠI VÀ LƯU TRÊN THIẾT BỊ</small>
-      </aside>
-      <main className={`game awning-${s.decor.awning}`}>
+      <main className={`game awning-${s.decor.awning} ${s.progression?.reducedMotion ? "reduce-motion" : ""}`}>
         <header className="statusbar">
+          <button className="owner-chip" onClick={() => openPanel("account")} aria-label="Hồ sơ chủ quán"><img src="/assets/may-host.svg" alt=""/><span><b>{s.progression?.ownerName || "Chủ Tiệm An"}</b><small>Lv.{Math.max(1, Math.floor(s.day / 3) + 1)} · Tiệm của bạn</small></span></button>
           <div>
             <small>NGÀY {String(s.day).padStart(2, "0")}</small>
             <b>
@@ -210,7 +190,7 @@ export default function App() {
             </b>
           </div>
           <div className="wallet">
-            <small>VÍ CỦA MÂY</small>
+            <small>🪙 VỐN CỦA TIỆM</small>
             <b>{money(s.money)}</b>
           </div>
           <div className="rating">
@@ -227,21 +207,52 @@ export default function App() {
           >
             <Icon name="pause" />
           </button>
+          <button className="icon-button" aria-label="Cài đặt" onClick={() => openPanel("settings")}>☰</button>
         </header>
-        <div className="awning" />
         <div className="shop-name">
+          <div className="awning" />
+          <img className="sign-cloud" src="/assets/cloud.svg" alt="" />
+          <img className="garden-frame" src="/assets/garden-frame.svg" alt="" />
           <span>• TRÀ NGON, NGÀY LÀNH •</span>
           <strong>
             {
-              ["tiệm trà mây", "mây & những tách trà", "một chút ngọt ngào"][
+              ["Tiệm Trà Mây", "Mây & Những Tách Trà", "Một Chút Ngọt Ngào"][
                 s.decor.sign
               ]
             }
           </strong>
           <i>est. 2026</i>
         </div>
+        <section className="welcome-scene" aria-label="Mây chào bạn">
+          <img className="may-host" src="/assets/may-host.svg" alt="Mây vẫy tay chào" />
+          <div className="welcome-bubble"><b>Chào {s.progression?.ownerName || "Chủ Tiệm An"}! ♡</b><p>{s.feedback?.text || (s.phase === "open" ? "Thêm chút ngọt ngào vào ngày của khách nhé!" : "Một chút trà thơm, một ngày thật lành.")}</p><button onClick={() => openPanel("quests")}>📋 Nhiệm vụ hôm nay</button></div>
+          <button className="daily-goals" onClick={() => openPanel("quests")}><b>⭐ Mục tiêu hôm nay</b><span>☑ Phục vụ {s.target} ly ({s.stats.served}/{s.target})</span><span>🪙 {money(s.stats.revenue)} doanh thu</span><span>⭐ Đánh giá ≥ 4.5</span></button>
+        </section>
+
+        <section className="workbench" aria-label="Quầy pha chế">
+          <div className="tea-row">
+            {teas.map((t) => (
+              <button
+                key={t.id}
+                className={`tea ${tea === t.id ? "selected" : ""}`}
+                disabled={!unlocked(s, t.id) || s.phase !== "open" || s.paused}
+                onClick={() => setTea(t.id)}
+                aria-label={`Chọn ${t.name}`}
+              >
+                <img src={`/assets/drink-${t.id}.svg`} alt="" />
+                <span>{t.name}</span>
+                {!unlocked(s, t.id) ? (
+                  <small>
+                    {s.day < t.day ? "Ngày " + t.day : "Mở ở Nâng cấp"}
+                  </small>
+                ) : (
+                  <small>{Math.floor(quantity(s, t.id))} phần</small>
+                )}
+              </button>
+            ))}
+          </div>
         <section className="customer-area" aria-label="Khách hàng">
-          <div className="queue">
+          <h2 className="section-label">🔔 Đơn hàng chờ ({s.orders.length})</h2><div className="queue">
             <span>
               {s.phase === "open"
                 ? `ĐANG CHỜ · ${s.orders.length}`
@@ -260,6 +271,7 @@ export default function App() {
               {s.stats.served}/{s.target} ly
             </small>
           </div>
+          <div className="order-list">{s.orders.map((o, index) => <button key={o.id} className={`order-ticket ${index === 0 ? "selected" : ""}`} disabled={!!c || s.paused} onClick={() => send({ type: "selectOrder", id: o.id })} aria-label={`Chọn đơn ${o.id}`}><img src={customers[o.customer].avatar} alt={customers[o.customer].name}/><img className="order-drink" src={`/assets/drink-${o.recipe.tea}.svg`} alt={label(o.recipe.tea)}/><span><b>{label(o.recipe.tea)}</b><small>⏱ {Math.ceil(o.remaining)}s · {o.recipe.size}</small><strong>+{money(o.recipe.price)}</strong></span><i>{index === 0 ? "✓" : "♡"}</i></button>)}</div>
           <div className="customer-row">
             <div className={`portrait ${s.feedback ? "happy" : ""}`}>
               <img
@@ -328,30 +340,8 @@ export default function App() {
             </div>
           </div>
         </section>
-        <section className="workbench" aria-label="Quầy pha chế">
-          <div className="tea-row">
-            {teas.map((t) => (
-              <button
-                key={t.id}
-                className={`tea ${tea === t.id ? "selected" : ""}`}
-                disabled={!unlocked(s, t.id) || s.phase !== "open" || s.paused}
-                onClick={() => setTea(t.id)}
-                aria-label={`Chọn ${t.name}`}
-              >
-                <img src={`/assets/tea-${t.id}.svg`} alt="" />
-                <span>{t.name}</span>
-                {!unlocked(s, t.id) ? (
-                  <small>
-                    {s.day < t.day ? "Ngày " + t.day : "Mở ở Nâng cấp"}
-                  </small>
-                ) : (
-                  <small>{Math.floor(quantity(s, t.id))} phần</small>
-                )}
-              </button>
-            ))}
-          </div>
-          <div className="stage">
-            <Counter />
+          <div className="stage"><h2 className="section-label">🧋 Pha chế đồ uống</h2>
+            <Suspense fallback={<div className="counter-loading">Mây đang chuẩn bị quầy…</div>}><Counter /></Suspense>
             <div className="cup-stack">
               <span>CHỌN LY</span>
               <button
@@ -423,6 +413,22 @@ export default function App() {
               {c?.sealed ? "Đã dán nắp" : c?.sealLeft ? "Đang dán…" : "Dán nắp"}
               <small>{s.upgrades.staff ? "Có bạn hỗ trợ" : "máy Mây 01"}</small>
             </button>
+          <div className="serve-row">
+            <button
+              className="trash"
+              onClick={() => send({ type: "trash" })}
+              disabled={!c || s.paused}
+            >
+              Bỏ ly
+            </button>
+            <button
+              className="primary serve"
+              disabled={!complete(c) || s.paused}
+              onClick={() => send({ type: "serve" })}
+            >
+              Giao cho khách <span>→</span>
+            </button>
+          </div>
             {s.phase !== "open" && (
               <div className="closed-card">
                 <img src="/assets/cloud.svg" alt="" />
@@ -474,7 +480,7 @@ export default function App() {
           <div className="ingredient-drawer">
             <div className="drawer-title">
               <span>THÊM MỘT CHÚT NGON</span>
-              <span>01 — 04</span>
+              <button className="expand-brew" onClick={() => openPanel("brew")}>Phóng to lựa chọn ↗</button>
             </div>
             <div className="toppings">
               {toppings.map((t, i) => (
@@ -565,25 +571,11 @@ export default function App() {
               </div>
             </div>
           </div>
-          <div className="serve-row">
-            <button
-              className="trash"
-              onClick={() => send({ type: "trash" })}
-              disabled={!c || s.paused}
-            >
-              Bỏ ly
-            </button>
-            <button
-              className="primary serve"
-              disabled={!complete(c) || s.paused}
-              onClick={() => send({ type: "serve" })}
-            >
-              Giao cho khách <span>→</span>
-            </button>
-          </div>
+
         </section>
+        <button className="event-banner" onClick={() => openPanel("events")}><span>🌸 SỰ KIỆN TẠI MÂY</span><b>{s.progression?.event ? "Có chuyện mới! Ghé xem nhé ♡" : "Mỗi ngày, một câu chuyện mới"}</b><span className="event-arrow">❯</span></button>
         <div className="message" role="status">
-          {s.message}
+          {online.active ? (online.status === "error" ? online.error : online.status === "saving" ? "☁ Đang lưu online…" : "☁ Đã lưu online · " + s.message) : s.message}
         </div>
         {s.tutorial && (
           <div className="tutorial">
@@ -605,16 +597,8 @@ export default function App() {
           </div>
         )}
         <nav className="bottom-nav" aria-label="Quản lý tiệm">
-          {(["kho", "recipe", "upgrade", "decor", "settings"] as const).map(
-            (p, i) => (
-              <button key={p} onClick={() => openPanel(p)}>
-                <Icon name={p} />
-                <span>
-                  {["Kho", "Công thức", "Nâng cấp", "Trang trí", "Cài đặt"][i]}
-                </span>
-              </button>
-            ),
-          )}
+          <button className="nav-home active" onClick={closePanel}><span className="nav-emoji" aria-hidden="true">🏪</span><span>Tiệm</span></button>
+          {(["kho", "upgrade", "decor", "staff", "events", "achievements"] as const).map((p, i) => <button key={p} onClick={() => openPanel(p)}><span className="nav-emoji" aria-hidden="true">{["📦", "🏡", "🪑", "👩‍🍳", "🎁", "🏆"][i]}</span><span>{["Kho", "Nâng cấp", "Trang trí", "Nhân viên", "Sự kiện", "Thành tựu"][i]}</span></button>)}
         </nav>
         {s.phase !== "summary" && (
           <button className="close-day" onClick={() => send({ type: "close" })}>
@@ -673,6 +657,7 @@ export default function App() {
                         decor: "Góc nhỏ của bạn",
                         report: "Sổ bán hàng",
                         settings: "Cài đặt & lưu game",
+                        events: "Chuyện nhỏ ở Mây", staff: "Những người bạn đồng hành", quests: "Nhiệm vụ hôm nay", achievements: "Bộ sưu tập thành tựu", account: "Hồ sơ chủ quán", brew: "Chọn vị ngon cho ly trà",
                       }[panel]
                     }
                   </h2>
@@ -686,6 +671,9 @@ export default function App() {
                 </button>
               </div>
               <div className="modal-body">
+                {panel === "brew" && <BrewOptions game={s} act={act} />}
+                {panel === "account" && <AccountPanel onClose={closePanel} />}
+                {(["staff", "events", "quests", "achievements"] as string[]).includes(panel) && <ProgressionPanel game={s} tab={panel as "staff" | "events" | "quests" | "achievements"} act={a => act(a)} />}
                 {panel === "kho" && (
                   <>
                     <div className="panel-summary">
@@ -905,6 +893,10 @@ export default function App() {
                 )}
                 {panel === "settings" && (
                   <div className="settings">
+                    <button onClick={() => act({type:"reducedMotion"})}>Giảm hiệu ứng: {s.progression?.reducedMotion ? "Bật" : "Tắt"}</button>
+                    <label>Tên chủ quán<input defaultValue={s.progression?.ownerName || "Chủ Tiệm An"} maxLength={30} onBlur={e => act({type:"ownerName", name:e.target.value})}/></label>
+                    <button onClick={() => setPanel("recipe")}>Sổ công thức</button>
+                    <button onClick={() => setPanel("account")}>Hồ sơ & tài khoản</button>
                     <button onClick={() => act({ type: "sound" })}>
                       Âm thanh: {s.sound ? "Bật" : "Tắt"}
                     </button>
@@ -986,20 +978,7 @@ export default function App() {
           </div>
         )}
       </main>
-      <aside className="right-note">
-        <div className="vertical-text">CHẬM MỘT CHÚT · NGỌT MỘT CHÚT</div>
-        <button onClick={() => openPanel("report")}>
-          <Icon name="report" /> Sổ bán hàng
-        </button>
-        <p>
-          Ngày {String(s.day).padStart(2, "0")}
-          <br />
-          <strong>{s.stats.served}</strong> chiếc ly trao đi
-        </p>
-        <div className="leaf-art">
-          <img src="/assets/tea-matcha.svg" alt="Bình matcha vẽ tay" />
-        </div>
-      </aside>
+
     </div>
   );
 }

@@ -41,6 +41,19 @@ describe("IndexedDB persistence", () => {
     expect(migrated.feedback).toBeNull();
     expect(validate(migrated)).toBe(true);
   });
+  it("backs up a genuine legacy record before adding progression without granting money", async () => {
+    const legacy = initial();
+    delete legacy.progression;
+    legacy.money = 87654;
+    await db.saves.put({ id: "main", data: legacy });
+    const migrated = await load();
+    expect(migrated.money).toBe(87654);
+    expect(migrated.progression?.schema).toBe(1);
+    expect((await db.backups.get("before-v2"))?.data).toEqual(legacy);
+    await save({ ...migrated, money: 87000 });
+    expect((await load()).money).toBe(87000);
+    expect((await db.backups.get("before-v2"))?.data.money).toBe(87654);
+  });
   it("rejects malformed imports and never writes invalid records", async () => {
     const s = initial();
     s.stock.milk = [{ qty: -1, expires: 4 }];
