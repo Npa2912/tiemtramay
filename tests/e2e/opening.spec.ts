@@ -1,4 +1,6 @@
 import {test,expect} from '@playwright/test';
+test.beforeEach(async ({page}) => { await page.addInitScript(() => {sessionStorage.setItem('may.guest','1');sessionStorage.setItem('may.qa.seed','4271');}); });
+
 test('day 2 with 40 portions of each tea and no pearls opens only after buying pearls',async({page})=>{
  const errors:string[]=[];page.on('pageerror',e=>errors.push(String(e)));
  await page.goto('/');await page.getByRole('button',{name:'Nhập nguyên liệu',exact:true}).click();

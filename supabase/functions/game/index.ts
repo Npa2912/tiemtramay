@@ -7,7 +7,7 @@ const url = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const allowedOrigin = Deno.env.get("APP_ORIGIN") || "http://localhost:5173";
 const headers = { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json", Vary: "Origin" };
-const types = new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion"]);
+const types = new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion", "repairMachine", "recoverTheft", "dismissIncident"]);
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers });
 async function admin(path: string, init: RequestInit = {}) {
   return fetch(`${url}/rest/v1/${path}`, { ...init, headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", ...init.headers } });
@@ -37,7 +37,7 @@ Deno.serve(async (request) => {
       if ((await replay.json()).length) return respond({ state: current.state, revision: current.revision });
     }
     if (current && revision !== current.revision) return respond({ error: "revision_conflict" }, 409);
-    let state = current?.state || initial();
+    let state = current?.state || initial(crypto.getRandomValues(new Uint32Array(1))[0]);
     if (!current) {
       state.money = 1000000; // Granted once, on creation only.
       const profileResponse = await admin(`profiles?id=eq.${encodeURIComponent(user.id)}&select=owner_name`);

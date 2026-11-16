@@ -1,0 +1,16 @@
+
+Running 4 tests using 1 worker
+
+(node:29759) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓  1 tests/e2e/incidents.spec.ts:62:1 › blackout really darkens the cafe, counts down and resumes unchanged drink after60 seconds (5.4s)
+  ✓  2 tests/e2e/incidents.spec.ts:93:1 › broken sealer offers50k repair or25k backup, charges once and keeps the cup (3.2s)
+  ✓  3 tests/e2e/incidents.spec.ts:117:1 › lock bought in real inventory UI prevents daily theft and expires on next day (1.6s)
+  ✓  4 tests/e2e/incidents.spec.ts:146:1 › camera recovery remains accessible in events after dismissing the theft notification (3.3s)
+
+  4 passed (14.6s)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

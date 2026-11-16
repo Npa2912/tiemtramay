@@ -1,7 +1,19 @@
-import { lazy, Suspense, useEffect, useRef, useState, type ReactNode } from "react";
-const Counter = lazy(() => import("./Counter").then(module => ({ default: module.Counter })));
+import {
+  lazy,
+  Suspense,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
+const Counter = lazy(() =>
+  import("./Counter").then((module) => ({ default: module.Counter })),
+);
 import { BrewOptions } from "./BrewOptions";
 import { ProgressionPanel } from "./ProgressionPanel";
+import { AuthScreen } from "./account/AuthScreen";
+import { getSession } from "./account/client";
+import { productionBlocked, securityActive } from "./incidents";
 import { AccountPanel } from "./account/AccountPanel";
 import { useGame, flushSave } from "./store";
 import {
@@ -23,10 +35,22 @@ import {
   missingOpeningSupplies,
   type Action,
 } from "./engine";
-import { parseSave } from "./persistence";
-import { effect, setMusic } from "./audio";
+import { parseSave, freshSeed } from "./persistence";
+import { effect, setMusic, setPouring } from "./audio";
 type Panel =
-  "kho" | "recipe" | "upgrade" | "decor" | "report" | "settings" | "events" | "staff" | "quests" | "achievements" | "account" | "brew" | null;
+  | "kho"
+  | "recipe"
+  | "upgrade"
+  | "decor"
+  | "report"
+  | "settings"
+  | "events"
+  | "staff"
+  | "quests"
+  | "achievements"
+  | "account"
+  | "brew"
+  | null;
 function Icon({ name }: { name: string }) {
   const paths: Record<string, ReactNode> = {
     cup: (
@@ -82,10 +106,25 @@ function Icon({ name }: { name: string }) {
 }
 export default function App() {
   const { game: s, act, ready, error, online } = useGame();
-  const [panel, setPanel] = useState<Panel>(location.hash.includes("access_token") ? "account" : null),
+  const [panel, setPanel] = useState<Panel>(
+      location.hash.includes("access_token") ? "account" : null,
+    ),
     [tea, setTea] = useState("milk"),
     [notice, setNotice] = useState(""),
     [confirmReset, setConfirmReset] = useState(false);
+  const [guest, setGuest] = useState(
+    () => sessionStorage.getItem("may.guest") === "1",
+  );
+  useEffect(() => {
+    function changed() {
+      if (!getSession()) {
+        sessionStorage.removeItem("may.guest");
+        setGuest(false);
+      }
+    }
+    window.addEventListener("may-account-change", changed);
+    return () => window.removeEventListener("may-account-change", changed);
+  }, []);
   const holding = useRef(false),
     last = useRef(0),
     file = useRef<HTMLInputElement>(null);
@@ -120,21 +159,36 @@ export default function App() {
           .act({ type: "tick", dt: (now - last.current) / 1000 });
         last.current = now;
       }
+      const current = useGame.getState().game;
+      const canPour =
+        holding.current &&
+        current.sound &&
+        !current.paused &&
+        !productionBlocked(current) &&
+        !!current.cup &&
+        !current.cup.sealed &&
+        current.cup.sealLeft === 0 &&
+        current.cup.fill < 1.1;
+      setPouring(canPour);
       if (holding.current) useGame.getState().act({ type: "pour", tea, dt });
       frame = requestAnimationFrame(loop);
     }
     frame = requestAnimationFrame(loop);
-    return () => cancelAnimationFrame(frame);
+    return () => {
+      cancelAnimationFrame(frame);
+      setPouring(false);
+    };
   }, [tea]);
   useEffect(() => {
     function stop() {
       holding.current = false;
+      setPouring(false);
     }
     function hidden() {
       stop();
       if (document.hidden && !useGame.getState().game.paused)
         useGame.getState().act({ type: "pause" });
-      void flushSave();
+      void flushSave().catch(() => {});
     }
     window.addEventListener("pointerup", stop);
     window.addEventListener("blur", stop);
@@ -176,11 +230,116 @@ export default function App() {
         <p>Mây đang dọn quầy…</p>
       </main>
     );
+  if (!online.active && (!guest || getSession()))
+    return (
+      <AuthScreen
+        onGuest={() => {
+          sessionStorage.setItem("may.guest", "1");
+          setGuest(true);
+        }}
+      />
+    );
   return (
     <div className="world">
-      <main className={`game awning-${s.decor.awning} ${s.progression?.reducedMotion ? "reduce-motion" : ""}`}>
+      <main
+        className={`game awning-${s.decor.awning} ${s.progression?.reducedMotion ? "reduce-motion" : ""}`}
+      >
+        {s.incidents && productionBlocked(s) && (
+          <div
+            className={`incident-blocker ${s.incidents.powerLeft > 0 && !securityActive(s, "generator") ? "blackout" : ""}`}
+            role="dialog"
+            aria-modal="true"
+            aria-label="Sự cố thiết bị"
+          >
+            <div className="incident-dialog">
+              <span className="incident-symbol">
+                {s.incidents.powerLeft > 0 && !securityActive(s, "generator")
+                  ? "🔦"
+                  : "🔧"}
+              </span>
+              <h2>
+                {s.incidents.powerLeft > 0 && !securityActive(s, "generator")
+                  ? "Mất điện trong khu phố!"
+                  : "Máy dán nắp bị hỏng!"}
+              </h2>
+              {s.incidents.powerLeft > 0 && !securityActive(s, "generator") ? (
+                <>
+                  <strong className="power-countdown">
+                    {Math.ceil(s.incidents.powerLeft)} giây
+                  </strong>
+                  <p>
+                    Đang chờ điện trở lại. Ly đang pha và thời gian chờ của
+                    khách được giữ nguyên.
+                  </p>
+                  <button
+                    onClick={() => act({ type: "security", id: "generator" })}
+                    disabled={s.money < 60000}
+                  >
+                    Dùng máy phát · 60.000đ
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p>Sửa máy chính hoặc dùng máy dự phòng để tiếp tục.</p>
+                  <button
+                    disabled={s.money < 50000}
+                    onClick={() => act({ type: "repairMachine" })}
+                  >
+                    Sửa máy · 50.000đ
+                  </button>
+                  <button
+                    disabled={s.money < 25000}
+                    onClick={() => act({ type: "security", id: "backup" })}
+                  >
+                    Máy dự phòng · 25.000đ
+                  </button>
+                </>
+              )}
+              {s.paused && (
+                <button onClick={() => act({ type: "pause" })}>
+                  Tiếp tục đếm giờ
+                </button>
+              )}
+              <button onClick={() => act({ type: "close" })}>
+                Kết sổ hôm nay
+              </button>
+            </div>
+          </div>
+        )}
+        {s.incidents?.notice && !productionBlocked(s) && (
+          <div className="incident-toast" role="status">
+            <span>{s.incidents.notice}</span>
+            {s.incidents.theft &&
+              s.incidents.theft.day === s.day &&
+              s.incidents.theft.camera &&
+              !s.incidents.theft.recovered &&
+              securityActive(s, "camera") && (
+                <button onClick={() => act({ type: "recoverTheft" })}>
+                  Kiểm tra camera & thu hồi
+                </button>
+              )}
+            <button
+              onClick={() => act({ type: "dismissIncident" })}
+              aria-label="Đóng thông báo sự cố"
+            >
+              ×
+            </button>
+          </div>
+        )}
         <header className="statusbar">
-          <button className="owner-chip" onClick={() => openPanel("account")} aria-label="Hồ sơ chủ quán"><img src="/assets/may-host.svg" alt=""/><span><b>{s.progression?.ownerName || "Chủ Tiệm An"}</b><small>Lv.{Math.max(1, Math.floor(s.day / 3) + 1)} · Tiệm của bạn</small></span></button>
+          <button
+            className="owner-chip"
+            onClick={() => openPanel("account")}
+            aria-label="Hồ sơ chủ quán"
+          >
+            <img src="/assets/may-host.svg" alt="" />
+            <span>
+              <b>{s.progression?.ownerName || "Chủ Tiệm An"}</b>
+              <small>
+                Lv.{Math.max(1, Math.floor(s.day / 3) + 1)} · Tiệm của bạn
+              </small>
+            </span>
+          </button>
           <div>
             <small>NGÀY {String(s.day).padStart(2, "0")}</small>
             <b>
@@ -207,7 +366,13 @@ export default function App() {
           >
             <Icon name="pause" />
           </button>
-          <button className="icon-button" aria-label="Cài đặt" onClick={() => openPanel("settings")}>☰</button>
+          <button
+            className="icon-button"
+            aria-label="Cài đặt"
+            onClick={() => openPanel("settings")}
+          >
+            ☰
+          </button>
         </header>
         <div className="shop-name">
           <div className="awning" />
@@ -224,9 +389,31 @@ export default function App() {
           <i>est. 2026</i>
         </div>
         <section className="welcome-scene" aria-label="Mây chào bạn">
-          <img className="may-host" src="/assets/may-host.svg" alt="Mây vẫy tay chào" />
-          <div className="welcome-bubble"><b>Chào {s.progression?.ownerName || "Chủ Tiệm An"}! ♡</b><p>{s.feedback?.text || (s.phase === "open" ? "Thêm chút ngọt ngào vào ngày của khách nhé!" : "Một chút trà thơm, một ngày thật lành.")}</p><button onClick={() => openPanel("quests")}>📋 Nhiệm vụ hôm nay</button></div>
-          <button className="daily-goals" onClick={() => openPanel("quests")}><b>⭐ Mục tiêu hôm nay</b><span>☑ Phục vụ {s.target} ly ({s.stats.served}/{s.target})</span><span>🪙 {money(s.stats.revenue)} doanh thu</span><span>⭐ Đánh giá ≥ 4.5</span></button>
+          <img
+            className="may-host"
+            src="/assets/may-host.svg"
+            alt="Mây vẫy tay chào"
+          />
+          <div className="welcome-bubble">
+            <b>Chào {s.progression?.ownerName || "Chủ Tiệm An"}! ♡</b>
+            <p>
+              {s.feedback?.text ||
+                (s.phase === "open"
+                  ? "Thêm chút ngọt ngào vào ngày của khách nhé!"
+                  : "Một chút trà thơm, một ngày thật lành.")}
+            </p>
+            <button onClick={() => openPanel("quests")}>
+              📋 Nhiệm vụ hôm nay
+            </button>
+          </div>
+          <button className="daily-goals" onClick={() => openPanel("quests")}>
+            <b>⭐ Mục tiêu hôm nay</b>
+            <span>
+              ☑ Phục vụ {s.target} ly ({s.stats.served}/{s.target})
+            </span>
+            <span>🪙 {money(s.stats.revenue)} doanh thu</span>
+            <span>⭐ Đánh giá ≥ 4.5</span>
+          </button>
         </section>
 
         <section className="workbench" aria-label="Quầy pha chế">
@@ -251,97 +438,135 @@ export default function App() {
               </button>
             ))}
           </div>
-        <section className="customer-area" aria-label="Khách hàng">
-          <h2 className="section-label">🔔 Đơn hàng chờ ({s.orders.length})</h2><div className="queue">
-            <span>
-              {s.phase === "open"
-                ? `ĐANG CHỜ · ${s.orders.length}`
-                : "HẸN BẠN Ở MÂY"}
-            </span>
-            <div>
-              {s.orders.slice(1).map((o) => (
-                <img
+          <section className="customer-area" aria-label="Khách hàng">
+            <h2 className="section-label">
+              🔔 Đơn hàng chờ ({s.orders.length})
+            </h2>
+            <div className="queue">
+              <span>
+                {s.phase === "open"
+                  ? `ĐANG CHỜ · ${s.orders.length}`
+                  : "HẸN BẠN Ở MÂY"}
+              </span>
+              <div>
+                {s.orders.slice(1).map((o) => (
+                  <img
+                    key={o.id}
+                    src={customers[o.customer].avatar}
+                    alt={customers[o.customer].name}
+                  />
+                ))}
+              </div>
+              <small>
+                {s.stats.served}/{s.target} ly
+              </small>
+            </div>
+            <div className="order-list">
+              {s.orders.map((o, index) => (
+                <button
                   key={o.id}
-                  src={customers[o.customer].avatar}
-                  alt={customers[o.customer].name}
-                />
+                  className={`order-ticket ${index === 0 ? "selected" : ""}`}
+                  disabled={!!c || s.paused}
+                  onClick={() => send({ type: "selectOrder", id: o.id })}
+                  aria-label={`Chọn đơn ${o.id}`}
+                >
+                  <img
+                    src={customers[o.customer].avatar}
+                    alt={customers[o.customer].name}
+                  />
+                  <img
+                    className="order-drink"
+                    src={`/assets/drink-${o.recipe.tea}.svg`}
+                    alt={label(o.recipe.tea)}
+                  />
+                  <span>
+                    <b>{label(o.recipe.tea)}</b>
+                    <small>
+                      ⏱ {Math.ceil(o.remaining)}s · {o.recipe.size}
+                    </small>
+                    <strong>+{money(o.recipe.price)}</strong>
+                  </span>
+                  <i>{index === 0 ? "✓" : "♡"}</i>
+                </button>
               ))}
             </div>
-            <small>
-              {s.stats.served}/{s.target} ly
-            </small>
-          </div>
-          <div className="order-list">{s.orders.map((o, index) => <button key={o.id} className={`order-ticket ${index === 0 ? "selected" : ""}`} disabled={!!c || s.paused} onClick={() => send({ type: "selectOrder", id: o.id })} aria-label={`Chọn đơn ${o.id}`}><img src={customers[o.customer].avatar} alt={customers[o.customer].name}/><img className="order-drink" src={`/assets/drink-${o.recipe.tea}.svg`} alt={label(o.recipe.tea)}/><span><b>{label(o.recipe.tea)}</b><small>⏱ {Math.ceil(o.remaining)}s · {o.recipe.size}</small><strong>+{money(o.recipe.price)}</strong></span><i>{index === 0 ? "✓" : "♡"}</i></button>)}</div>
-          <div className="customer-row">
-            <div className={`portrait ${s.feedback ? "happy" : ""}`}>
-              <img
-                src={
-                  actor !== undefined
-                    ? `/assets/customer-${actor}${mood ? "-" + mood : ""}.svg`
-                    : "/assets/customer-0.svg"
-                }
-                alt={
-                  actor !== undefined
-                    ? `${customers[actor].name} ${mood}`
-                    : "Chủ tiệm"
-                }
-              />
-              <b>{actor !== undefined ? customers[actor].name : "Mây"}</b>
-            </div>
-            <div className="speech">
-              {r ? (
-                <>
-                  <div className="order-heading">
+            <div className="customer-row">
+              <div className={`portrait ${s.feedback ? "happy" : ""}`}>
+                <img
+                  src={
+                    actor !== undefined
+                      ? `/assets/customer-${actor}${mood ? "-" + mood : ""}.svg`
+                      : "/assets/customer-0.svg"
+                  }
+                  alt={
+                    actor !== undefined
+                      ? `${customers[actor].name} ${mood}`
+                      : "Chủ tiệm"
+                  }
+                />
+                <b>{actor !== undefined ? customers[actor].name : "Mây"}</b>
+              </div>
+              <div className="speech">
+                {r ? (
+                  <>
+                    <div className="order-heading">
+                      <b>
+                        {label(r.tea)} · {r.size}
+                      </b>
+                      <span>#{order.id}</span>
+                    </div>
+                    <p>
+                      {label(r.topping)} · {label(r.flavor)}
+                    </p>
+                    <p>
+                      Đường <strong>{r.sugar}%</strong> ·{" "}
+                      {r.ice === 50 ? "Ít đá" : "Đá thường"}
+                    </p>
+                    <small>
+                      {money(r.price)} · {customers[order.customer].personality}
+                    </small>
+                    <div
+                      className="patience"
+                      role="progressbar"
+                      aria-label="Kiên nhẫn"
+                      aria-valuenow={Math.round(
+                        (order.remaining / order.total) * 100,
+                      )}
+                    >
+                      <i
+                        style={{
+                          width: `${Math.max(0, (order.remaining / order.total) * 100)}%`,
+                        }}
+                      />
+                    </div>
+                  </>
+                ) : (
+                  <>
                     <b>
-                      {label(r.tea)} · {r.size}
+                      {s.phase === "summary"
+                        ? "Hôm nay vất vả rồi!"
+                        : "Chào mừng về tiệm."}
                     </b>
-                    <span>#{order.id}</span>
-                  </div>
-                  <p>
-                    {label(r.topping)} · {label(r.flavor)}
-                  </p>
-                  <p>
-                    Đường <strong>{r.sugar}%</strong> ·{" "}
-                    {r.ice === 50 ? "Ít đá" : "Đá thường"}
-                  </p>
-                  <small>
-                    {money(r.price)} · {customers[order.customer].personality}
-                  </small>
-                  <div
-                    className="patience"
-                    role="progressbar"
-                    aria-label="Kiên nhẫn"
-                    aria-valuenow={Math.round(
-                      (order.remaining / order.total) * 100,
-                    )}
-                  >
-                    <i
-                      style={{
-                        width: `${Math.max(0, (order.remaining / order.total) * 100)}%`,
-                      }}
-                    />
-                  </div>
-                </>
-              ) : (
-                <>
-                  <b>
-                    {s.phase === "summary"
-                      ? "Hôm nay vất vả rồi!"
-                      : "Chào mừng về tiệm."}
-                  </b>
-                  <p>
-                    {s.phase === "summary"
-                      ? "Xem sổ ngày, rồi chuẩn bị cho ngày mai nhé."
-                      : "Nhập kho, chuẩn bị quầy và mở cửa đón những vị khách đầu tiên."}
-                  </p>
-                  <small>Mỗi chiếc ly, một niềm vui.</small>
-                </>
-              )}
+                    <p>
+                      {s.phase === "summary"
+                        ? "Xem sổ ngày, rồi chuẩn bị cho ngày mai nhé."
+                        : "Nhập kho, chuẩn bị quầy và mở cửa đón những vị khách đầu tiên."}
+                    </p>
+                    <small>Mỗi chiếc ly, một niềm vui.</small>
+                  </>
+                )}
+              </div>
             </div>
-          </div>
-        </section>
-          <div className="stage"><h2 className="section-label">🧋 Pha chế đồ uống</h2>
-            <Suspense fallback={<div className="counter-loading">Mây đang chuẩn bị quầy…</div>}><Counter /></Suspense>
+          </section>
+          <div className="stage">
+            <h2 className="section-label">🧋 Pha chế đồ uống</h2>
+            <Suspense
+              fallback={
+                <div className="counter-loading">Mây đang chuẩn bị quầy…</div>
+              }
+            >
+              <Counter />
+            </Suspense>
             <div className="cup-stack">
               <span>CHỌN LY</span>
               <button
@@ -413,22 +638,22 @@ export default function App() {
               {c?.sealed ? "Đã dán nắp" : c?.sealLeft ? "Đang dán…" : "Dán nắp"}
               <small>{s.upgrades.staff ? "Có bạn hỗ trợ" : "máy Mây 01"}</small>
             </button>
-          <div className="serve-row">
-            <button
-              className="trash"
-              onClick={() => send({ type: "trash" })}
-              disabled={!c || s.paused}
-            >
-              Bỏ ly
-            </button>
-            <button
-              className="primary serve"
-              disabled={!complete(c) || s.paused}
-              onClick={() => send({ type: "serve" })}
-            >
-              Giao cho khách <span>→</span>
-            </button>
-          </div>
+            <div className="serve-row">
+              <button
+                className="trash"
+                onClick={() => send({ type: "trash" })}
+                disabled={!c || s.paused}
+              >
+                Bỏ ly
+              </button>
+              <button
+                className="primary serve"
+                disabled={!complete(c) || s.paused}
+                onClick={() => send({ type: "serve" })}
+              >
+                Giao cho khách <span>→</span>
+              </button>
+            </div>
             {s.phase !== "open" && (
               <div className="closed-card">
                 <img src="/assets/cloud.svg" alt="" />
@@ -480,7 +705,9 @@ export default function App() {
           <div className="ingredient-drawer">
             <div className="drawer-title">
               <span>THÊM MỘT CHÚT NGON</span>
-              <button className="expand-brew" onClick={() => openPanel("brew")}>Phóng to lựa chọn ↗</button>
+              <button className="expand-brew" onClick={() => openPanel("brew")}>
+                Phóng to lựa chọn ↗
+              </button>
             </div>
             <div className="toppings">
               {toppings.map((t, i) => (
@@ -571,11 +798,24 @@ export default function App() {
               </div>
             </div>
           </div>
-
         </section>
-        <button className="event-banner" onClick={() => openPanel("events")}><span>🌸 SỰ KIỆN TẠI MÂY</span><b>{s.progression?.event ? "Có chuyện mới! Ghé xem nhé ♡" : "Mỗi ngày, một câu chuyện mới"}</b><span className="event-arrow">❯</span></button>
+        <button className="event-banner" onClick={() => openPanel("events")}>
+          <span>🌸 SỰ KIỆN TẠI MÂY</span>
+          <b>
+            {s.progression?.event
+              ? "Có chuyện mới! Ghé xem nhé ♡"
+              : "Mỗi ngày, một câu chuyện mới"}
+          </b>
+          <span className="event-arrow">❯</span>
+        </button>
         <div className="message" role="status">
-          {online.active ? (online.status === "error" ? online.error : online.status === "saving" ? "☁ Đang lưu online…" : "☁ Đã lưu online · " + s.message) : s.message}
+          {online.active
+            ? online.status === "error"
+              ? online.error
+              : online.status === "saving"
+                ? "☁ Đang lưu online…"
+                : "☁ Đã lưu online · " + s.message
+            : s.message}
         </div>
         {s.tutorial && (
           <div className="tutorial">
@@ -597,8 +837,40 @@ export default function App() {
           </div>
         )}
         <nav className="bottom-nav" aria-label="Quản lý tiệm">
-          <button className="nav-home active" onClick={closePanel}><span className="nav-emoji" aria-hidden="true">🏪</span><span>Tiệm</span></button>
-          {(["kho", "upgrade", "decor", "staff", "events", "achievements"] as const).map((p, i) => <button key={p} onClick={() => openPanel(p)}><span className="nav-emoji" aria-hidden="true">{["📦", "🏡", "🪑", "👩‍🍳", "🎁", "🏆"][i]}</span><span>{["Kho", "Nâng cấp", "Trang trí", "Nhân viên", "Sự kiện", "Thành tựu"][i]}</span></button>)}
+          <button className="nav-home active" onClick={closePanel}>
+            <span className="nav-emoji" aria-hidden="true">
+              🏪
+            </span>
+            <span>Tiệm</span>
+          </button>
+          {(
+            [
+              "kho",
+              "upgrade",
+              "decor",
+              "staff",
+              "events",
+              "achievements",
+            ] as const
+          ).map((p, i) => (
+            <button key={p} onClick={() => openPanel(p)}>
+              <span className="nav-emoji" aria-hidden="true">
+                {["📦", "🏡", "🪑", "👩‍🍳", "🎁", "🏆"][i]}
+              </span>
+              <span>
+                {
+                  [
+                    "Kho",
+                    "Nâng cấp",
+                    "Trang trí",
+                    "Nhân viên",
+                    "Sự kiện",
+                    "Thành tựu",
+                  ][i]
+                }
+              </span>
+            </button>
+          ))}
         </nav>
         {s.phase !== "summary" && (
           <button className="close-day" onClick={() => send({ type: "close" })}>
@@ -657,7 +929,12 @@ export default function App() {
                         decor: "Góc nhỏ của bạn",
                         report: "Sổ bán hàng",
                         settings: "Cài đặt & lưu game",
-                        events: "Chuyện nhỏ ở Mây", staff: "Những người bạn đồng hành", quests: "Nhiệm vụ hôm nay", achievements: "Bộ sưu tập thành tựu", account: "Hồ sơ chủ quán", brew: "Chọn vị ngon cho ly trà",
+                        events: "Chuyện nhỏ ở Mây",
+                        staff: "Những người bạn đồng hành",
+                        quests: "Nhiệm vụ hôm nay",
+                        achievements: "Bộ sưu tập thành tựu",
+                        account: "Hồ sơ chủ quán",
+                        brew: "Chọn vị ngon cho ly trà",
                       }[panel]
                     }
                   </h2>
@@ -673,7 +950,17 @@ export default function App() {
               <div className="modal-body">
                 {panel === "brew" && <BrewOptions game={s} act={act} />}
                 {panel === "account" && <AccountPanel onClose={closePanel} />}
-                {(["staff", "events", "quests", "achievements"] as string[]).includes(panel) && <ProgressionPanel game={s} tab={panel as "staff" | "events" | "quests" | "achievements"} act={a => act(a)} />}
+                {(
+                  ["staff", "events", "quests", "achievements"] as string[]
+                ).includes(panel) && (
+                  <ProgressionPanel
+                    game={s}
+                    tab={
+                      panel as "staff" | "events" | "quests" | "achievements"
+                    }
+                    act={(a) => act(a)}
+                  />
+                )}
                 {panel === "kho" && (
                   <>
                     <div className="panel-summary">
@@ -893,10 +1180,26 @@ export default function App() {
                 )}
                 {panel === "settings" && (
                   <div className="settings">
-                    <button onClick={() => act({type:"reducedMotion"})}>Giảm hiệu ứng: {s.progression?.reducedMotion ? "Bật" : "Tắt"}</button>
-                    <label>Tên chủ quán<input defaultValue={s.progression?.ownerName || "Chủ Tiệm An"} maxLength={30} onBlur={e => act({type:"ownerName", name:e.target.value})}/></label>
-                    <button onClick={() => setPanel("recipe")}>Sổ công thức</button>
-                    <button onClick={() => setPanel("account")}>Hồ sơ & tài khoản</button>
+                    <button onClick={() => act({ type: "reducedMotion" })}>
+                      Giảm hiệu ứng:{" "}
+                      {s.progression?.reducedMotion ? "Bật" : "Tắt"}
+                    </button>
+                    <label>
+                      Tên chủ quán
+                      <input
+                        defaultValue={s.progression?.ownerName || "Chủ Tiệm An"}
+                        maxLength={30}
+                        onBlur={(e) =>
+                          act({ type: "ownerName", name: e.target.value })
+                        }
+                      />
+                    </label>
+                    <button onClick={() => setPanel("recipe")}>
+                      Sổ công thức
+                    </button>
+                    <button onClick={() => setPanel("account")}>
+                      Hồ sơ & tài khoản
+                    </button>
                     <button onClick={() => act({ type: "sound" })}>
                       Âm thanh: {s.sound ? "Bật" : "Tắt"}
                     </button>
@@ -950,7 +1253,7 @@ export default function App() {
                         <button
                           className="danger"
                           onClick={() => {
-                            useGame.getState().replace(initial());
+                            useGame.getState().replace(initial(freshSeed()));
                             void flushSave();
                             setConfirmReset(false);
                             setNotice("Đã bắt đầu tiệm mới.");
@@ -978,7 +1281,6 @@ export default function App() {
           </div>
         )}
       </main>
-
     </div>
   );
 }

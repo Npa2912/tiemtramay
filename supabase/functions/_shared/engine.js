@@ -1,3 +1,257 @@
+// src/incidents.ts
+function dailyRoll(seed, day, salt) {
+  let x = (seed ^ Math.imul(day, 2654435769) ^ salt) >>> 0;
+  x = Math.imul(x ^ x >>> 16, 569420461);
+  x = Math.imul(x ^ x >>> 15, 1935289751);
+  return ((x ^ x >>> 15) >>> 0) / 4294967296;
+}
+function createIncidents(seed, day) {
+  return {
+    version: 1,
+    day,
+    theftPlanned: dailyRoll(seed, day, 101) < 0.35,
+    powerPlanned: dailyRoll(seed, day, 202) < 0.2,
+    machinePlanned: dailyRoll(seed, day, 303) < 0.15,
+    theftChecked: false,
+    powerChecked: false,
+    machineChecked: false,
+    powerLeft: 0,
+    machineBroken: false,
+    expires: {},
+    theft: null,
+    notice: ""
+  };
+}
+function ensureIncidents(input) {
+  if (input.incidents) return input;
+  const incidents = createIncidents(input.seed, input.day);
+  if (input.progression?.event?.id === "theft") incidents.theftChecked = true;
+  if (input.progression?.event?.id === "power") incidents.powerChecked = true;
+  if (input.progression?.event?.id === "machine")
+    incidents.machineChecked = true;
+  if (input.progression?.security.lock) incidents.expires.lock = input.day;
+  if (input.progression?.security.camera)
+    incidents.expires.camera = input.day + 9;
+  return { ...input, incidents };
+}
+function validIncidents(v) {
+  if (!v || typeof v !== "object") return false;
+  const i = v;
+  return i.version === 1 && Number.isSafeInteger(i.day) && i.day >= 1 && [
+    "theftPlanned",
+    "powerPlanned",
+    "machinePlanned",
+    "theftChecked",
+    "powerChecked",
+    "machineChecked",
+    "machineBroken"
+  ].every((k) => typeof i[k] === "boolean") && Number.isFinite(i.powerLeft) && i.powerLeft >= 0 && i.powerLeft <= 60 && typeof i.notice === "string" && i.notice.length < 1e3 && !!i.expires && typeof i.expires === "object" && Object.entries(i.expires).every(
+    ([k, v2]) => ["lock", "camera"].includes(k) && Number.isSafeInteger(v2) && v2 >= 1
+  ) && (i.theft === null || !!i.theft && Number.isSafeInteger(i.theft.day) && i.theft.day >= 1 && Number.isSafeInteger(i.theft.amount) && i.theft.amount >= 0 && typeof i.theft.recovered === "boolean" && (i.theft.camera === void 0 || typeof i.theft.camera === "boolean"));
+}
+function securityActive(s, id) {
+  if (!s.progression?.security[id]) return false;
+  if (id !== "lock" && id !== "camera") return true;
+  const expiry = s.incidents?.expires[id];
+  return expiry === void 0 || expiry >= s.day;
+}
+function productionBlocked(s) {
+  return !!s.incidents && (s.incidents.machineBroken || s.incidents.powerLeft > 0 && !securityActive(s, "generator"));
+}
+function expense(s, kind, amount) {
+  s.money -= amount;
+  s.ledger.push({ day: s.day, kind, amount: -amount });
+  s.ledger = s.ledger.slice(-600);
+  if (s.progression) {
+    if (s.phase === "summary") {
+      s.stats.expenses += amount;
+      s.stats.profit = s.stats.revenue - s.stats.cogs - s.stats.expenses - s.stats.waste;
+      if (s.history.length) s.history[s.history.length - 1] = { ...s.stats };
+    } else
+      s.progression.eventExpenses = (s.progression.eventExpenses ?? 0) + amount;
+  }
+}
+function history(s, id, text2) {
+  if (s.progression) {
+    s.progression.eventHistory.push({
+      id,
+      day: s.day,
+      choice: "incident",
+      text: text2
+    });
+    s.progression.eventHistory = s.progression.eventHistory.slice(-200);
+    s.progression.metrics.events++;
+  }
+  s.message = text2;
+}
+var brewActions = /* @__PURE__ */ new Set([
+  "cup",
+  "pour",
+  "top",
+  "flavor",
+  "sugar",
+  "ice",
+  "seal",
+  "serve",
+  "trash",
+  "selectOrder"
+]);
+function interceptIncident(input, a) {
+  const source = ensureIncidents(input), i = source.incidents;
+  if (a.type === "dismissIncident") {
+    const s = structuredClone(source);
+    s.incidents.notice = "";
+    return s;
+  }
+  if (a.type === "recoverTheft") {
+    const s = structuredClone(source), theft = s.incidents.theft;
+    if (theft && theft.day === s.day && theft.camera && !theft.recovered && securityActive(s, "camera")) {
+      s.money += theft.amount;
+      s.ledger.push({
+        day: s.day,
+        kind: "Camera: thu h\u1ED3i ti\u1EC1n th\u1EA5t l\u1EA1c",
+        amount: theft.amount
+      });
+      s.ledger = s.ledger.slice(-600);
+      theft.recovered = true;
+      if (s.progression) {
+        if (s.phase === "summary") {
+          s.stats.expenses = Math.max(0, s.stats.expenses - theft.amount);
+          s.stats.profit = s.stats.revenue - s.stats.cogs - s.stats.expenses - s.stats.waste;
+          if (s.history.length)
+            s.history[s.history.length - 1] = { ...s.stats };
+        } else
+          s.progression.eventExpenses = Math.max(
+            0,
+            (s.progression.eventExpenses ?? 0) - theft.amount
+          );
+      }
+      s.incidents.notice = "Camera \u0111\xE3 gi\xFAp \u0111\u1ED1i chi\u1EBFu v\xE0 thu h\u1ED3i ti\u1EC1n th\u1EA5t l\u1EA1c.";
+    }
+    return s;
+  }
+  if (a.type === "repairMachine") {
+    const s = structuredClone(source);
+    if (!s.incidents.machineBroken) return s;
+    if (s.money < 5e4) {
+      s.message = "C\u1EA7n 50.000\u0111 \u0111\u1EC3 s\u1EEDa m\xE1y, ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111.";
+      return s;
+    }
+    expense(s, "S\u1EEDa m\xE1y d\xE1n n\u1EAFp", 5e4);
+    s.incidents.machineBroken = false;
+    s.incidents.notice = "M\xE1y \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa. Ti\u1EBFp t\u1EE5c pha ly \u0111ang l\xE0m nh\xE9!";
+    return s;
+  }
+  if (a.type === "tick" && productionBlocked(source) && source.phase === "open") {
+    if (source.paused) return source;
+    const s = structuredClone(source);
+    s.incidents.powerLeft = Math.max(
+      0,
+      s.incidents.powerLeft - Math.max(0, Math.min(1, Number.isFinite(a.dt) ? a.dt : 0))
+    );
+    if (i.powerLeft > 0 && s.incidents.powerLeft === 0)
+      s.incidents.notice = "\u0110i\u1EC7n \u0111\xE3 tr\u1EDF l\u1EA1i! Qu\u1EA7y ti\u1EBFp t\u1EE5c ho\u1EA1t \u0111\u1ED9ng.";
+    return s;
+  }
+  if (brewActions.has(a.type) && productionBlocked(source)) return source;
+  if (!source.paused && source.phase === "open" && source.cup && (a.type === "pour" || a.type === "seal")) {
+    if (!i.powerChecked && i.powerPlanned) {
+      const s = structuredClone(source);
+      s.incidents.powerChecked = true;
+      s.incidents.powerLeft = securityActive(s, "generator") ? 0 : 60;
+      history(
+        s,
+        "power",
+        securityActive(s, "generator") ? "M\u1EA5t \u0111i\u1EC7n! M\xE1y ph\xE1t \u0111\xE3 b\u1EADt, qu\u1EA7y v\u1EABn ho\u1EA1t \u0111\u1ED9ng." : "M\u1EA5t \u0111i\u1EC7n! Qu\u1EA7y t\u1EA1m d\u1EEBng 60 gi\xE2y; kh\xE1ch v\xE0 ly \u0111ang pha \u0111\u01B0\u1EE3c gi\u1EEF nguy\xEAn."
+      );
+      s.incidents.notice = s.message;
+      if (s.incidents.powerLeft > 0) return s;
+    }
+    if (!i.machineChecked && i.machinePlanned && !securityActive(source, "backup")) {
+      const s = structuredClone(source);
+      s.incidents.machineChecked = true;
+      s.incidents.machineBroken = true;
+      history(
+        s,
+        "machine",
+        "M\xE1y d\xE1n n\u1EAFp b\u1ECB h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111."
+      );
+      s.incidents.notice = s.message;
+      return s;
+    }
+  }
+  return null;
+}
+function afterIncidents(previous, next, a) {
+  if (previous === next) return next;
+  const s = ensureIncidents(next), i = s.incidents;
+  if (s.day !== i.day) {
+    const fresh = createIncidents(previous.seed, s.day);
+    fresh.expires = { ...i.expires };
+    fresh.theft = i.theft;
+    fresh.machineBroken = i.machineBroken;
+    s.incidents = fresh;
+    for (const id of ["lock", "camera"])
+      if (fresh.expires[id] !== void 0 && fresh.expires[id] < s.day && s.progression)
+        delete s.progression.security[id];
+  }
+  if (a.type === "security" && s.progression?.security[a.id] && !previous.progression?.security[a.id]) {
+    if (a.id === "lock") s.incidents.expires.lock = s.day;
+    if (a.id === "camera") s.incidents.expires.camera = s.day + 9;
+    if (a.id === "backup") s.incidents.machineBroken = false;
+    if (a.id === "generator") s.incidents.powerLeft = 0;
+  }
+  const current = s.incidents;
+  if (!s.paused && s.phase === "open" && s.cup && (a.type === "pour" || a.type === "seal")) {
+    if (!current.theftChecked) {
+      current.theftChecked = true;
+      if (current.theftPlanned) {
+        const loss = securityActive(s, "lock") ? 0 : Math.floor(
+          Math.max(0, s.money) * (securityActive(s, "safe") ? 0.05 : 0.1)
+        );
+        current.theft = {
+          day: s.day,
+          amount: loss,
+          recovered: loss === 0,
+          camera: securityActive(s, "camera")
+        };
+        if (loss) expense(s, "M\u1EA5t tr\u1ED9m: th\u1EA5t tho\xE1t v\u1ED1n", loss);
+        history(
+          s,
+          "theft",
+          loss ? `Qu\u1EA7y b\u1ECB tr\u1ED9m ${loss.toLocaleString("vi-VN")}\u0111 (${securityActive(s, "safe") ? "5% nh\u1EDD k\xE9t ti\u1EC1n" : "10% v\u1ED1n hi\u1EC7n c\xF3"}).` : securityActive(s, "lock") ? "Kh\xF3a ch\u1ED1ng tr\u1ED9m h\xF4m nay \u0111\xE3 b\u1EA3o v\u1EC7 to\xE0n b\u1ED9 ti\u1EC1n qu\u1EA7y." : "V\u1EE5 tr\u1ED9m kh\xF4ng g\xE2y th\u1EA5t tho\xE1t v\xEC qu\u1EF9 hi\u1EC7n kh\xF4ng c\xF3 s\u1ED1 d\u01B0."
+        );
+        current.notice = s.message;
+      }
+    }
+    if (!current.powerChecked) {
+      current.powerChecked = true;
+      if (current.powerPlanned) {
+        current.powerLeft = securityActive(s, "generator") ? 0 : 60;
+        history(
+          s,
+          "power",
+          current.powerLeft ? "M\u1EA5t \u0111i\u1EC7n! \u0110\u1EE3i 60 gi\xE2y ho\u1EB7c d\xF9ng m\xE1y ph\xE1t." : "M\u1EA5t \u0111i\u1EC7n, m\xE1y ph\xE1t \u0111ang duy tr\xEC qu\u1EA7y."
+        );
+        current.notice = s.message;
+      }
+    }
+    if (!current.machineChecked) {
+      current.machineChecked = true;
+      if (current.machinePlanned) {
+        current.machineBroken = !securityActive(s, "backup");
+        history(
+          s,
+          "machine",
+          current.machineBroken ? "M\xE1y h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111." : "M\xE1y ch\xEDnh h\u1ECFng; m\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 ti\u1EBFp qu\u1EA3n."
+        );
+        current.notice = s.message;
+      }
+    }
+  }
+  return s;
+}
+
 // src/catalog.ts
 var teas = [
   { id: "milk", name: "Tr\xE0 s\u1EEFa", color: 13211248, day: 1 },
@@ -444,36 +698,36 @@ var securityCatalog = [
     id: "lock",
     name: "Kh\xF3a ch\u1ED1ng tr\u1ED9m",
     cost: 2e4,
-    day: 4,
-    desc: "Gi\u1EA3m m\u1ED9t n\u1EEDa th\u1EA5t tho\xE1t trong s\u1EF1 ki\u1EC7n m\u1EA5t tr\u1ED9m."
+    day: 1,
+    desc: "Ch\u1EB7n ho\xE0n to\xE0n tr\u1ED9m trong ng\xE0y mua. H\xF4m sau c\u1EA7n mua l\u1EA1i (20.000\u0111/ng\xE0y)."
   },
   {
     id: "camera",
     name: "Camera an ninh",
     cost: 5e4,
-    day: 10,
-    desc: "Ki\u1EC3m tra camera gi\xFAp t\xECm l\u1EA1i ti\u1EC1n th\u1EA5t l\u1EA1c."
+    day: 1,
+    desc: "C\xF3 hi\u1EC7u l\u1EF1c 10 ng\xE0y t\xEDnh c\u1EA3 ng\xE0y mua. \u0110\u1ED1i chi\u1EBFu \u0111\u1EC3 thu h\u1ED3i ti\u1EC1n b\u1ECB tr\u1ED9m khi camera c\xF2n h\u1EA1n."
   },
   {
     id: "safe",
     name: "K\xE9t ti\u1EC1n",
     cost: 7e4,
-    day: 15,
-    desc: "Gi\u1EDBi h\u1EA1n th\u1EA5t tho\xE1t m\u1EA5t tr\u1ED9m c\xF2n 5.000\u0111."
+    day: 1,
+    desc: "V\u0129nh vi\u1EC5n: gi\u1EDBi h\u1EA1n t\u1ED5n th\u1EA5t do tr\u1ED9m c\xF2n 5% v\u1ED1n hi\u1EC7n c\xF3 thay v\xEC 10%."
   },
   {
     id: "generator",
     name: "M\xE1y ph\xE1t \u0111i\u1EC7n",
     cost: 6e4,
-    day: 8,
-    desc: "Duy tr\xEC thi\u1EBFt b\u1ECB khi m\u1EA5t \u0111i\u1EC7n."
+    day: 1,
+    desc: "V\u0129nh vi\u1EC5n: duy tr\xEC qu\u1EA7y khi m\u1EA5t \u0111i\u1EC7n (20% m\u1ED7i ng\xE0y); kh\xF4ng c\u1EA7n \u0111\u1EE3i 60 gi\xE2y."
   },
   {
     id: "backup",
     name: "M\xE1y d\xE1n n\u1EAFp d\u1EF1 ph\xF2ng",
-    cost: 35e3,
-    day: 6,
-    desc: "Kh\u1EAFc ph\u1EE5c s\u1EF1 c\u1ED1 m\xE1y m\xE0 kh\xF4ng m\u1EA5t ph\xED s\u1EEDa."
+    cost: 25e3,
+    day: 1,
+    desc: "V\u0129nh vi\u1EC5n: t\u1EF1 thay m\xE1y ch\xEDnh khi h\u1ECFng. Ho\u1EB7c s\u1EEDa m\xE1y ch\xEDnh v\u1EDBi gi\xE1 50.000\u0111."
   }
 ];
 var events = [
@@ -482,7 +736,7 @@ var events = [
     name: "Ti\u1EC1n qu\u1EA7y b\u1ECB thi\u1EBFu",
     story: "M\xE2y th\u1EA5y ti\u1EC1n qu\u1EA7y ch\u01B0a kh\u1EDBp s\u1ED5. C\xF3 th\u1EC3 l\xE0 nh\u1EA7m l\u1EABn ho\u1EB7c th\u1EA5t l\u1EA1c; ch\u01B0a c\xF3 b\u1EB1ng ch\u1EE9ng \u0111\u1EC3 k\u1EBFt lu\u1EADn ai g\xE2y ra.",
     day: 4,
-    cooldown: 14,
+    cooldown: 1,
     priority: 3,
     choices: [
       {
@@ -499,7 +753,7 @@ var events = [
       {
         id: "continue",
         label: "Ghi nh\u1EADn v\xE0 ti\u1EBFp t\u1EE5c",
-        description: "Ch\u1EA5p nh\u1EADn th\u1EA5t tho\xE1t t\u1ED1i \u0111a 20.000\u0111 v\xE0 5% ti\u1EC1n hi\u1EC7n c\xF3."
+        description: "M\u1EA5t 10% v\u1ED1n hi\u1EC7n c\xF3; c\xF3 k\xE9t ti\u1EC1n th\xEC t\u1ED1i \u0111a 5%, c\xF3 kh\xF3a h\xF4m nay th\xEC kh\xF4ng m\u1EA5t ti\u1EC1n."
       }
     ]
   },
@@ -541,7 +795,7 @@ var events = [
       {
         id: "wait",
         label: "Ch\u1EDD \u0111i\u1EC7n \u1ED5n \u0111\u1ECBnh",
-        description: "M\xE1y d\xE1n n\u1EAFp ch\u1EADm th\xEAm 0,5 gi\xE2y h\xF4m nay."
+        description: "Qu\u1EA7y m\u1EA5t \u0111i\u1EC7n 60 gi\xE2y, c\xF3 \u0111\u1EBFm ng\u01B0\u1EE3c; m\xE1y ph\xE1t gi\xFAp ti\u1EBFp t\u1EE5c ho\u1EA1t \u0111\u1ED9ng."
       },
       {
         id: "notice",
@@ -686,8 +940,8 @@ var events = [
       {
         id: "repair",
         label: "G\u1ECDi b\u1EA3o tr\xEC",
-        description: "Chi 12.000\u0111; m\xE1y ho\u1EA1t \u0111\u1ED9ng b\xECnh th\u01B0\u1EDDng.",
-        cost: 12e3
+        description: "Chi 50.000\u0111; m\xE1y ho\u1EA1t \u0111\u1ED9ng b\xECnh th\u01B0\u1EDDng.",
+        cost: 5e4
       },
       {
         id: "backup",
@@ -698,7 +952,7 @@ var events = [
       {
         id: "manual",
         label: "V\u1EC7 sinh th\u1EE7 c\xF4ng",
-        description: "M\xE1y ch\u1EADm th\xEAm 0,4 gi\xE2y h\xF4m nay."
+        description: "Qu\u1EA7y t\u1EA1m d\u1EEBng t\u1EDBi khi s\u1EEDa 50.000\u0111 ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111."
       }
     ]
   },
@@ -1016,7 +1270,7 @@ function applyProgression(previous, next, action) {
       const roll = (Math.imul(s.seed ^ s.day, 1103515245) >>> 0) % 100;
       if (roll < 42) {
         const available = events.filter(
-          (e) => e.day <= s.day && s.day - (p.cooldowns[e.id] ?? -999) >= e.cooldown
+          (e) => !["theft", "power", "machine"].includes(e.id) && e.day <= s.day && s.day - (p.cooldowns[e.id] ?? -999) >= e.cooldown
         );
         if (available.length) {
           const weight = available.reduce((n, e) => n + e.priority, 0);
@@ -1059,7 +1313,7 @@ function reduceProgression(input, action) {
   if (action.type === "eventChoice") {
     const e = events.find((x) => x.id === p.event?.id), c = e?.choices.find((x) => x.id === action.choice);
     if (!e || !c) return s;
-    if (c.requires && !p.security[c.requires]) {
+    if (c.requires && !securityActive(s, c.requires)) {
       s.message = "C\u1EA7n mua thi\u1EBFt b\u1ECB ph\xF9 h\u1EE3p tr\u01B0\u1EDBc.";
       return s;
     }
@@ -1107,8 +1361,9 @@ function reduceProgression(input, action) {
     let text2 = c.description;
     switch (e.id) {
       case "theft": {
-        const cap = p.security.safe ? 5e3 : p.security.lock ? 1e4 : 2e4;
-        const loss = Math.min(cap, Math.floor(Math.max(0, s.money) * 0.05));
+        const loss = securityActive(s, "lock") ? 0 : Math.floor(
+          Math.max(0, s.money) * (securityActive(s, "safe") ? 0.05 : 0.1)
+        );
         const recovered = c.id === "camera" ? 1 : c.id === "inventory" ? level(p, "manager") ? 0.8 : 0.5 : 0;
         const amount = Math.round(loss * (1 - recovered));
         if (amount) eventSpend(s, "Ch\xEAnh l\u1EC7ch qu\u1EA7y \u0111\xE3 \u0111\u1ED1i chi\u1EBFu", amount);
@@ -1120,8 +1375,9 @@ function reduceProgression(input, action) {
         else s.reputation += 0.1;
         break;
       case "power":
-        if (c.id === "wait") p.boosts.seal = -0.5;
-        else if (c.id === "notice") s.reputation -= 0.03;
+        if (c.id === "wait") {
+          if (s.incidents) s.incidents.powerLeft = 60;
+        } else if (c.id === "notice") s.reputation -= 0.03;
         break;
       case "inspection":
         if (c.id === "clean") s.reputation += 0.05;
@@ -1158,7 +1414,7 @@ function reduceProgression(input, action) {
         if (c.id === "return") p.metrics.regulars++;
         break;
       case "machine":
-        if (c.id === "manual") p.boosts.seal = -0.4;
+        if (c.id === "manual" && s.incidents) s.incidents.machineBroken = true;
         break;
       case "rival":
         if (c.id === "quality") p.boosts.patience += 5;
@@ -1179,13 +1435,13 @@ function reduceProgression(input, action) {
     updateMetrics(s);
     return s;
   }
-  if (s.phase === "open") {
+  if (s.phase === "open" && action.type !== "security") {
     s.message = "H\xE3y k\u1EBFt s\u1ED5 \u0111\u1EC3 tuy\u1EC3n d\u1EE5ng, \u0111\xE0o t\u1EA1o ho\u1EB7c mua thi\u1EBFt b\u1ECB.";
     return s;
   }
   if (action.type === "security") {
     const item = securityCatalog.find((x) => x.id === action.id);
-    if (item && !p.security[item.id] && s.day >= item.day && s.money >= item.cost) {
+    if (item && !securityActive(s, item.id) && s.day >= item.day && s.money >= item.cost) {
       p.security[item.id] = 1;
       log(s, item.name, -item.cost);
       s.message = `\u0110\xE3 l\u1EAFp ${item.name.toLowerCase()}.`;
@@ -1277,7 +1533,7 @@ function initial(seed = 4271) {
     tutorial: true,
     sound: true
   };
-  return s;
+  return ensureIncidents(s);
 }
 function log2(s, kind, amount) {
   s.money = Math.round((s.money + amount) * 100) / 100;
@@ -1303,15 +1559,26 @@ function random(s) {
   return s.seed / 4294967296;
 }
 function recipeNeeds(r) {
-  const needs = { [r.tea]: 0.85 * (r.size === "L" ? 1.5 : 1), [r.topping]: 1, [`cup${r.size}`]: 1, lid: 1, sugar: r.sugar / 100, ice: r.ice / 100 };
+  const needs = {
+    [r.tea]: 0.85 * (r.size === "L" ? 1.5 : 1),
+    [r.topping]: 1,
+    [`cup${r.size}`]: 1,
+    lid: 1,
+    sugar: r.sugar / 100,
+    ice: r.ice / 100
+  };
   if (r.tea === "milk") needs.milkPowder = needs[r.tea] * 0.3;
   if (r.flavor !== "plain") needs[r.flavor] = 1;
   return needs;
 }
 function canQueue(s, recipe) {
   const reserved = {};
-  for (const order of s.orders) for (const [id, qty] of Object.entries(recipeNeeds(order.recipe))) reserved[id] = (reserved[id] || 0) + qty;
-  return Object.entries(recipeNeeds(recipe)).every(([id, qty]) => quantity(s, id) + 1e-7 >= qty + (reserved[id] || 0));
+  for (const order of s.orders)
+    for (const [id, qty] of Object.entries(recipeNeeds(order.recipe)))
+      reserved[id] = (reserved[id] || 0) + qty;
+  return Object.entries(recipeNeeds(recipe)).every(
+    ([id, qty]) => quantity(s, id) + 1e-7 >= qty + (reserved[id] || 0)
+  );
 }
 function enqueue(s) {
   while (s.orders.length < 3 && s.generated < s.target) {
@@ -1353,9 +1620,9 @@ function finish(s) {
   s.orders = [];
   s.cup = null;
   s.phase = "summary";
-  const expense = 6e3 + 2e3 + (s.upgrades.staff ? 8e3 : 0);
-  s.stats.expenses = expense;
-  log2(s, "Thu\xEA qu\u1EA7y, \u0111i\u1EC7n n\u01B0\u1EDBc v\xE0 l\u01B0\u01A1ng", -expense);
+  const expense2 = 6e3 + 2e3 + (s.upgrades.staff ? 8e3 : 0);
+  s.stats.expenses = expense2;
+  log2(s, "Thu\xEA qu\u1EA7y, \u0111i\u1EC7n n\u01B0\u1EDBc v\xE0 l\u01B0\u01A1ng", -expense2);
   s.stats.profit = s.stats.revenue - s.stats.cogs - s.stats.expenses - s.stats.waste;
   s.history.push({ ...s.stats });
   s.history = s.history.slice(-365);
@@ -1375,10 +1642,22 @@ function quality(c, r) {
   if (c.ice !== r.ice) score -= 0.1;
   return Math.max(0, score);
 }
-var progressionActions = /* @__PURE__ */ new Set(["eventChoice", "hire", "train", "staffAssign", "security", "claimQuest", "ownerName", "reducedMotion"]);
+var progressionActions = /* @__PURE__ */ new Set([
+  "eventChoice",
+  "hire",
+  "train",
+  "staffAssign",
+  "security",
+  "claimQuest",
+  "ownerName",
+  "reducedMotion"
+]);
 function reduce(input, a) {
-  if (progressionActions.has(a.type)) return reduceProgression(input, a);
-  return applyProgression(input, reduceCore(input, a), a);
+  const prepared = ensureIncidents(input);
+  const intercepted = interceptIncident(prepared, a);
+  if (intercepted) return intercepted;
+  const next = progressionActions.has(a.type) ? reduceProgression(prepared, a) : applyProgression(prepared, reduceCore(prepared, a), a);
+  return afterIncidents(prepared, next, a);
 }
 function reduceCore(input, a) {
   if (a.type === "tick" && (input.phase !== "open" || input.paused))
@@ -1402,7 +1681,8 @@ function reduceCore(input, a) {
   }
   if (s.paused) return s;
   if (a.type === "selectOrder") {
-    if (s.phase !== "open" || s.cup) return say("Ho\xE0n th\xE0nh ho\u1EB7c b\u1ECF ly \u0111ang pha tr\u01B0\u1EDBc khi \u0111\u1ED5i \u0111\u01A1n.");
+    if (s.phase !== "open" || s.cup)
+      return say("Ho\xE0n th\xE0nh ho\u1EB7c b\u1ECF ly \u0111ang pha tr\u01B0\u1EDBc khi \u0111\u1ED5i \u0111\u01A1n.");
     const index = s.orders.findIndex((o) => o.id === a.id);
     if (index > 0) s.orders.unshift(...s.orders.splice(index, 1));
     return s;
@@ -1648,7 +1928,9 @@ function validate(value) {
   if (!value || typeof value !== "object") return false;
   const s = value;
   try {
-    if (s.progression !== void 0 && !validProgression(s.progression)) return false;
+    if (s.incidents !== void 0 && !validIncidents(s.incidents)) return false;
+    if (s.progression !== void 0 && !validProgression(s.progression))
+      return false;
     if (s.version !== 2 || !integer(s.day, 1) || !finite2(s.money, -1e6) || !integer(s.debt) || !integer(s.creditDay) || !finite2(s.reputation, 1, 5) || !integer(s.seed, 0, 4294967295) || !integer(s.sequence) || !integer(s.generated) || !integer(s.target, 1, 100) || !finite2(s.clock) || typeof s.paused !== "boolean" || typeof s.sound !== "boolean" || typeof s.tutorial !== "boolean" || !text(s.message) || !["prep", "open", "summary"].includes(s.phase))
       return false;
     if (!Array.isArray(s.orders) || s.orders.length > 3 || !s.stock || typeof s.stock !== "object" || !s.stats || !s.decor || !s.upgrades || !Array.isArray(s.history) || s.history.length > 365 || !Array.isArray(s.ledger) || s.ledger.length > 600)

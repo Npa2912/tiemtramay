@@ -1,0 +1,56 @@
+
+> tiem-tra-may@1.0.0 test
+> vitest run
+
+
+ RUN  v3.2.7 /workspace/tiemtramay
+
+stdout | tests/engine.test.ts > persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN
+LONG_RUN [{"day":1,"money":868300,"served":5,"profit":23535},{"day":5,"money":935120,"served":7,"profit":48722.5},{"day":10,"money":1109250,"served":10,"profit":71105},{"day":20,"money":2661312,"served":15,"profit":224321.25},{"day":30,"money":6092171,"served":20,"profit":426012.5},{"day":35,"money":7710644,"served":20,"profit":432742.5}]
+
+ ✓ tests/engine.test.ts (23 tests) 2483ms
+   ✓ persistence and long run > simulates 35 seeded days, no negative inventory, stuck orders, duplicate payout or NaN  2366ms
+stdout | tests/v2.test.ts > 2.0 thirty-day strategy evidence > simulates 30 days: new-player
+V2_STRATEGY_new-player {"final":{"day":30,"cash":3332396,"served":10,"lost":10,"profit":180678,"reputation":1.02},"minCash":765500,"totalServed":220,"totalLost":155,"eventsResolved":23,"rewardsClaimed":0,"accurateServed":220,"averageDailyProfit":85241,"milestones":[{"day":1,"cash":841000,"served":4,"lost":1,"profit":-3765,"reputation":4.5600000000000005},{"day":7,"cash":1002100,"served":6,"lost":2,"profit":124385,"reputation":4.6600000000000055},{"day":15,"cash":1762630,"served":8,"lost":4,"profit":-63353,"reputation":3.780000000000013},{"day":30,"cash":3332396,"served":10,"lost":10,"profit":180678,"reputation":1.02}]}
+
+ ✓ tests/incidents.test.ts (13 tests) 119ms
+ ✓ tests/cloud-security.test.ts (6 tests) 111ms
+ ✓ tests/audio.test.ts (3 tests) 26ms
+ ✓ tests/cloud-store.test.ts (5 tests) 3281ms
+   ✓ opt-in online store > preserves guest balance and never autosaves cloud progress over it  647ms
+   ✓ opt-in online store > halts commands after a sync conflict instead of mutating local money  836ms
+   ✓ opt-in online store > refuses importing a browser snapshot into an authoritative online save  554ms
+   ✓ opt-in online store > waits for server acknowledgement before confirming a manual save  659ms
+   ✓ opt-in online store > locks guest actions and concurrent entry while a source switch is pending  582ms
+ ✓ tests/persistence.test.ts (5 tests) 43ms
+ ✓ tests/progression.test.ts (23 tests) 43ms
+ ✓ tests/account.test.ts (4 tests) 7ms
+stdout | tests/v2.test.ts > 2.0 thirty-day strategy evidence > simulates 30 days: saving
+V2_STRATEGY_saving {"final":{"day":30,"cash":6447602,"served":20,"lost":0,"profit":436050,"reputation":5},"minCash":847400,"totalServed":375,"totalLost":0,"eventsResolved":23,"rewardsClaimed":0,"accurateServed":375,"averageDailyProfit":189377,"milestones":[{"day":1,"cash":868300,"served":5,"lost":0,"profit":23535,"reputation":4.7},{"day":7,"cash":1344520,"served":8,"lost":0,"profit":170553,"reputation":5},{"day":15,"cash":2806678,"served":12,"lost":0,"profit":-41995,"reputation":5},{"day":30,"cash":6447602,"served":20,"lost":0,"profit":436050,"reputation":5}]}
+
+stdout | tests/v2.test.ts > 2.0 thirty-day strategy evidence > simulates 30 days: upgrades
+V2_STRATEGY_upgrades {"final":{"day":30,"cash":8832144,"served":20,"lost":0,"profit":640383,"reputation":5},"minCash":505370,"totalServed":375,"totalLost":0,"eventsResolved":20,"rewardsClaimed":0,"accurateServed":375,"averageDailyProfit":303610,"milestones":[{"day":1,"cash":829800,"served":5,"lost":0,"profit":35035,"reputation":4.7},{"day":7,"cash":695770,"served":8,"lost":0,"profit":217583,"reputation":5},{"day":15,"cash":2203708,"served":12,"lost":0,"profit":276836,"reputation":5},{"day":30,"cash":8832144,"served":20,"lost":0,"profit":640383,"reputation":5}]}
+
+stdout | tests/v2.test.ts > 2.0 thirty-day strategy evidence > simulates 30 days: mistakes
+V2_STRATEGY_mistakes {"final":{"day":30,"cash":4529978,"served":20,"lost":0,"profit":294945,"reputation":1},"minCash":778760,"totalServed":375,"totalLost":0,"eventsResolved":23,"rewardsClaimed":0,"accurateServed":195,"averageDailyProfit":123973,"milestones":[{"day":1,"cash":839960,"served":5,"lost":0,"profit":-4805,"reputation":4.38},{"day":7,"cash":1050408,"served":8,"lost":0,"profit":111808,"reputation":2.959999999999998},{"day":15,"cash":2029440,"served":12,"lost":0,"profit":-47118,"reputation":1},{"day":30,"cash":4529978,"served":20,"lost":0,"profit":294945,"reputation":1}]}
+
+stdout | tests/v2.test.ts > 2.0 thirty-day strategy evidence > simulates 30 days: quests
+V2_STRATEGY_quests {"final":{"day":30,"cash":6356671,"served":20,"lost":0,"profit":426013,"reputation":5},"minCash":868300,"totalServed":375,"totalLost":0,"eventsResolved":20,"rewardsClaimed":79,"accurateServed":375,"averageDailyProfit":191063,"milestones":[{"day":1,"cash":868300,"served":5,"lost":0,"profit":23535,"reputation":4.7},{"day":7,"cash":1140920,"served":8,"lost":0,"profit":132703,"reputation":5},{"day":15,"cash":1792093,"served":12,"lost":0,"profit":125696,"reputation":5},{"day":30,"cash":6356671,"served":20,"lost":0,"profit":426013,"reputation":5}]}
+
+ ✓ tests/v2.test.ts (11 tests) 8974ms
+   ✓ 2.0 thirty-day strategy evidence > simulates 30 days: new-player  2677ms
+   ✓ 2.0 thirty-day strategy evidence > simulates 30 days: saving  1359ms
+   ✓ 2.0 thirty-day strategy evidence > simulates 30 days: upgrades  1479ms
+   ✓ 2.0 thirty-day strategy evidence > simulates 30 days: mistakes  1433ms
+   ✓ 2.0 thirty-day strategy evidence > simulates 30 days: quests  1953ms
+
+ Test Files  9 passed (9)
+      Tests  93 passed (93)
+   Start at  15:10:19
+   Duration  9.39s (transform 392ms, setup 0ms, collect 807ms, tests 15.09s, environment 1ms, prepare 508ms)
+
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

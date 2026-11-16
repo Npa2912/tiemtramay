@@ -1,0 +1,44 @@
+
+> tiem-tra-may@1.0.0 test:e2e
+> playwright test
+
+
+Running 27 tests using 1 worker
+
+(node:26179) Warning: The 'NO_COLOR' env is ignored due to the 'FORCE_COLOR' env being set.
+(Use `node --trace-warnings ...` to show where the warning was created)
+  ✓   1 tests/e2e/game.spec.ts:89:1 › real pointer gameplay, purchases, two customers, summary, upgrade, next day, IndexedDB reload (18.3s)
+  ✓   2 tests/e2e/game.spec.ts:133:3 › responsive 360x640, dialogs, assets, no overflow (2.7s)
+  ✓   3 tests/e2e/game.spec.ts:133:3 › responsive 375x667, dialogs, assets, no overflow (2.9s)
+  ✓   4 tests/e2e/game.spec.ts:133:3 › responsive 390x844, dialogs, assets, no overflow (2.9s)
+  ✓   5 tests/e2e/game.spec.ts:133:3 › responsive 412x915, dialogs, assets, no overflow (2.8s)
+  ✓   6 tests/e2e/game.spec.ts:133:3 › responsive 768x1024, dialogs, assets, no overflow (3.2s)
+  ✓   7 tests/e2e/game.spec.ts:133:3 › responsive 1366x768, dialogs, assets, no overflow (3.5s)
+  ✓   8 tests/e2e/game.spec.ts:177:1 › pause, save during drink, reload, resume and mobile repeated input (4.7s)
+  ✓   9 tests/e2e/game.spec.ts:208:1 › decoration persists; JSON export/import validates data; reset is confirmed (5.0s)
+  ✓  10 tests/e2e/game.spec.ts:249:1 › keyboard pour releases immediately and hiding tab pauses gameplay (3.5s)
+  ✓  11 tests/e2e/game.spec.ts:275:1 › complete all first-day orders and automatically close, then continue day 2 (32.7s)
+  ✓  12 tests/e2e/game.spec.ts:294:1 › real touch hold, release and rapid multitouch do not duplicate a cup (5.4s)
+BROWSER_LONG_RUN {"beforeHeap":6231108,"afterHeap":11472796,"delta":5241688,"samples":[{"day":1,"cash":868300,"served":5,"profit":23535},{"day":5,"cash":935120,"served":7,"profit":48722.5},{"day":10,"cash":1109250,"served":10,"profit":71105},{"day":20,"cash":2661312,"served":15,"profit":224321.25},{"day":30,"cash":6092171,"served":20,"profit":426012.5},{"day":35,"cash":7710644,"served":20,"profit":432742.5}]}
+  ✓  13 tests/e2e/game.spec.ts:346:1 › browser QA controller simulates 35 days with actual IndexedDB roundtrips and bounded heap (7.5s)
+  ✓  14 tests/e2e/game.spec.ts:392:1 › opening an empty shop explains missing supplies and opens inventory, then works after purchase (3.2s)
+  ✓  15 tests/e2e/incidents.spec.ts:46:1 › blackout really darkens the cafe, counts down and resumes unchanged drink after60 seconds (4.8s)
+  ✓  16 tests/e2e/incidents.spec.ts:77:1 › broken sealer offers50k repair or25k backup, charges once and keeps the cup (3.5s)
+  ✓  17 tests/e2e/incidents.spec.ts:101:1 › lock bought in real inventory UI prevents daily theft and expires on next day (1.5s)
+  ✓  18 tests/e2e/opening.spec.ts:4:1 › day 2 with 40 portions of each tea and no pearls opens only after buying pearls (3.2s)
+  ✓  19 tests/e2e/v2.spec.ts:13:3 › 2.0 viewport 360x800: no page scroll, usable navigation and real game screenshot (5.8s)
+  ✓  20 tests/e2e/v2.spec.ts:13:3 › 2.0 viewport 390x844: no page scroll, usable navigation and real game screenshot (5.7s)
+  ✓  21 tests/e2e/v2.spec.ts:13:3 › 2.0 viewport 430x932: no page scroll, usable navigation and real game screenshot (5.9s)
+  ✓  22 tests/e2e/v2.spec.ts:13:3 › 2.0 viewport 768x1024: no page scroll, usable navigation and real game screenshot (6.2s)
+  ✓  23 tests/e2e/v2.spec.ts:13:3 › 2.0 viewport 1440x900: no page scroll, usable navigation and real game screenshot (6.6s)
+  ✓  24 tests/e2e/v2.spec.ts:61:1 › 2.0 selecting a queued order uses the actual order and never swaps a cup (2.7s)
+  ✓  25 tests/e2e/v2.spec.ts:83:1 › 2.0 quest rewards and staff training change state once and survive reload (4.5s)
+  ✓  26 tests/e2e/v2.spec.ts:118:1 › 2.0 a naturally generated event resolves through its real UI and is recorded (1.3s)
+  ✓  27 tests/e2e/v2.spec.ts:142:1 › 2.0 enlarged brewing controls are usable on mobile and preserve the cup (3.1s)
+
+  27 passed (2.6m)
+npm notice
+npm notice New major version of npm available! 11.9.0 -> 12.2.2
+npm notice Changelog: https://github.com/npm/cli/releases/tag/v12.2.2
+npm notice To update run: npm install -g npm@12.2.2
+npm notice

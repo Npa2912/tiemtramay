@@ -1,13 +1,13 @@
+import { securityActive, equipmentLabel } from "./incidents";
 import {
   events,
   migrateProgression,
   quests,
   securityCatalog,
   staffCatalog,
-  type ProgressionAction,
 } from "./progression";
 import { money } from "./catalog";
-import type { State } from "./engine";
+import type { State, Action } from "./engine";
 export function ProgressionPanel({
   game,
   tab,
@@ -15,7 +15,7 @@ export function ProgressionPanel({
 }: {
   game: State;
   tab: "events" | "staff" | "quests" | "achievements";
-  act: (a: ProgressionAction) => void;
+  act: (a: Action) => void;
 }) {
   const p = migrateProgression(game).progression;
   if (tab === "events") {
@@ -32,7 +32,7 @@ export function ProgressionPanel({
                 key={c.id}
                 onClick={() => act({ type: "eventChoice", choice: c.id })}
                 disabled={
-                  (!!c.requires && !p.security[c.requires]) ||
+                  (!!c.requires && !securityActive(game, c.requires)) ||
                   (c.cost ?? 0) > game.money
                 }
               >
@@ -43,10 +43,26 @@ export function ProgressionPanel({
           </article>
         ) : (
           <p className="hint">
-            Hôm nay khu phố yên bình. Sự kiện có thể xuất hiện từ ngày 3, cách
-            nhau ít nhất 3 ngày; mỗi sự kiện có thời gian hồi riêng.
+            Mỗi ngày có 35% khả năng bị trộm, 20% mất điện và 15% máy hỏng. Mỗi
+            loại kiểm tra một lần/ngày lúc pha nước. Các câu chuyện khác có lịch
+            riêng.
           </p>
         )}
+        {game.incidents?.theft?.day === game.day &&
+          game.incidents.theft.camera &&
+          !game.incidents.theft.recovered &&
+          securityActive(game, "camera") && (
+            <article className="receipt camera-recovery">
+              <h3>Camera đã ghi hình sự cố</h3>
+              <p>
+                Có thể đối chiếu và thu hồi {money(game.incidents.theft.amount)}{" "}
+                trong hôm nay.
+              </p>
+              <button onClick={() => act({ type: "recoverTheft" })}>
+                Kiểm tra camera & thu hồi tiền
+              </button>
+            </article>
+          )}
         <h3>Nhật ký khu phố</h3>
         {p.eventHistory.length === 0 ? (
           <p className="hint">Mây đang chờ câu chuyện đầu tiên.</p>
@@ -69,18 +85,19 @@ export function ProgressionPanel({
             <div>
               <b>{item.name}</b>
               <p>{item.desc}</p>
-              <small>Từ ngày {item.day}</small>
+              <small>{equipmentLabel(game, item.id)}</small>
             </div>
             <button
               disabled={
-                !!p.security[item.id] ||
+                securityActive(game, item.id) ||
                 game.day < item.day ||
-                game.money < item.cost ||
-                game.phase === "open"
+                game.money < item.cost
               }
               onClick={() => act({ type: "security", id: item.id })}
             >
-              {p.security[item.id] ? "Đã lắp" : money(item.cost)}
+              {securityActive(game, item.id)
+                ? "Đang có hiệu lực"
+                : money(item.cost)}
             </button>
           </article>
         ))}

@@ -2,6 +2,7 @@
 
 Giao diện một màn hình, hình Mây và ly trà SVG gốc, 12 sự kiện, 5 vai trò nhân viên, 30 nhiệm vụ chính, 50 nhiệm vụ phụ và 20 thành tựu. Bản lưu cũ được giữ số dư và sao lưu trước khi bổ sung tiến trình mới. Game mới bắt đầu với **1.000.000đ**.
 
+- [Bản cập nhật tài khoản, an ninh và sự cố](UPDATE_ACCOUNTS_INCIDENTS.md).
 - [Báo cáo kiểm thử 2.0](V2_QA_REPORT.md) và [hướng dẫn triển khai](V2_DEPLOYMENT.md).
 - [Thiết lập tài khoản Supabase](docs/ACCOUNTS.md): cần cấu hình, migration và Edge Function trước khi dùng online. Tài khoản/đồng bộ thực tế chưa được xác minh khi chưa có dự án thử nghiệm.
 - [Ảnh điện thoại](screenshots/v2-390x844.png) và [ảnh desktop](screenshots/v2-1440x900.png).

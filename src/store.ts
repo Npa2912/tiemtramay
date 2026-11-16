@@ -1,7 +1,7 @@
 import { create } from "zustand";
 import { initial, reduce, validate, type Action, type State } from "./engine";
 import { save, load } from "./persistence";
-import { cloudAction, getSession } from "./account/client";
+import { cloudAction, getSession, restoreSession } from "./account/client";
 export interface OnlineStatus {
   active: boolean;
   status: "local" | "saving" | "saved" | "error";
@@ -9,7 +9,13 @@ export interface OnlineStatus {
   revision: number | null;
   userId: string | null;
 }
-const localStatus = (): OnlineStatus => ({ active: false, status: "local", error: "", revision: null, userId: null });
+const localStatus = (): OnlineStatus => ({
+  active: false,
+  status: "local",
+  error: "",
+  revision: null,
+  userId: null,
+});
 interface Store {
   game: State;
   ready: boolean;
@@ -44,10 +50,15 @@ function enqueue(action: Action) {
     // Frame events are coalesced: a pour carries its own server clock tick.
     const last = queue[queue.length - 1];
     if (last?.type === "tick" || last?.type === "pour") {
-      if (action.type === "pour" || last.type === "tick") queue[queue.length - 1] = action;
+      if (action.type === "pour" || last.type === "tick")
+        queue[queue.length - 1] = action;
     } else if (Date.now() - lastClockSent >= 180) queue.push(action);
   } else queue.push(action);
-  if (!pumpTimer && !pumping && queue.length) pumpTimer = setTimeout(() => { pumpTimer = undefined; void pump(); }, 40);
+  if (!pumpTimer && !pumping && queue.length)
+    pumpTimer = setTimeout(() => {
+      pumpTimer = undefined;
+      void pump();
+    }, 40);
 }
 async function pump() {
   if (pumping || !queue.length) return;
@@ -60,14 +71,33 @@ async function pump() {
   lastClockSent = Date.now();
   useGame.setState({ online: { ...current.online, status: "saving" } });
   try {
-    if (getSession()?.user.id !== current.online.userId) throw Error("Tài khoản đã thay đổi. Hãy trở về bản lưu trên thiết bị.");
+    if (getSession()?.user.id !== current.online.userId)
+      throw Error("Tài khoản đã thay đổi. Hãy trở về bản lưu trên thiết bị.");
     const result = await cloudAction(action, current.online.revision);
-    if (!validate(result.state)) throw Error("Bản lưu trên máy chủ chưa tương thích. Cần cập nhật máy chủ game.");
-    if (ticket === generation) useGame.setState({ game: result.state, online: { ...current.online, revision: result.revision, status: "saved", error: "" } });
+    if (!validate(result.state))
+      throw Error(
+        "Bản lưu trên máy chủ chưa tương thích. Cần cập nhật máy chủ game.",
+      );
+    if (ticket === generation)
+      useGame.setState({
+        game: result.state,
+        online: {
+          ...current.online,
+          revision: result.revision,
+          status: "saved",
+          error: "",
+        },
+      });
   } catch (error) {
     if (ticket === generation) {
       queue = [];
-      useGame.setState({ online: { ...current.online, status: "error", error: error instanceof Error ? error.message : String(error) } });
+      useGame.setState({
+        online: {
+          ...current.online,
+          status: "error",
+          error: error instanceof Error ? error.message : String(error),
+        },
+      });
     }
   } finally {
     finishedRequests++;
@@ -86,12 +116,22 @@ export const useGame = create<Store>((set, get) => ({
     else set({ game: reduce(get().game, a) });
   },
   replace: (s) => {
-    if (switching) { set({ error: "Đang chuyển bản lưu. Hãy chờ thao tác hoàn tất." }); return; }
-    if (get().online.active) { set({ error: "Không thể nhập hoặc reset save khi đang chơi online. Hãy trở về bản lưu trên thiết bị trước." }); return; }
+    if (switching) {
+      set({ error: "Đang chuyển bản lưu. Hãy chờ thao tác hoàn tất." });
+      return;
+    }
+    if (get().online.active) {
+      set({
+        error:
+          "Không thể nhập hoặc reset save khi đang chơi online. Hãy trở về bản lưu trên thiết bị trước.",
+      });
+      return;
+    }
     set({ game: s });
   },
   enterOnline: async () => {
-    if (switching) throw Error("Đang chuyển bản lưu. Hãy chờ thao tác hoàn tất.");
+    if (switching)
+      throw Error("Đang chuyển bản lưu. Hãy chờ thao tác hoàn tất.");
     const identity = getSession()?.user.id;
     if (!identity) throw Error("Hãy đăng nhập trước khi chơi online.");
     switching = true;
@@ -103,10 +143,23 @@ export const useGame = create<Store>((set, get) => ({
         await save(localSnapshot); // Actions are locked until the source switch completes.
       }
       const result = await cloudAction(null, null);
-      if (!validate(result.state)) throw Error("Bản lưu trên máy chủ chưa tương thích. Cần cập nhật máy chủ game.");
+      if (!validate(result.state))
+        throw Error(
+          "Bản lưu trên máy chủ chưa tương thích. Cần cập nhật máy chủ game.",
+        );
       if (ticket !== generation) throw Error("Đã hủy chuyển bản lưu.");
-      if (getSession()?.user.id !== identity) throw Error("Tài khoản đã thay đổi. Vui lòng thử lại.");
-      set({ game: result.state, online: { active: true, status: "saved", error: "", revision: result.revision, userId: identity } });
+      if (getSession()?.user.id !== identity)
+        throw Error("Tài khoản đã thay đổi. Vui lòng thử lại.");
+      set({
+        game: result.state,
+        online: {
+          active: true,
+          status: "saved",
+          error: "",
+          revision: result.revision,
+          userId: identity,
+        },
+      });
     } finally {
       if (ticket === generation) switching = false;
     }
@@ -114,13 +167,21 @@ export const useGame = create<Store>((set, get) => ({
   leaveOnline: async () => {
     cancelQueue();
     switching = false;
-    const guest = localSnapshot || await load();
+    const guest = localSnapshot || (await load());
     localSnapshot = null;
     set({ game: guest, online: localStatus() });
   },
   init: async () => {
     try {
       set({ game: await load(), ready: true });
+      if (getSession()) {
+        try {
+          await restoreSession();
+          await get().enterOnline();
+        } catch (e) {
+          set({ error: e instanceof Error ? e.message : String(e) });
+        }
+      }
     } catch (e) {
       set({ ready: true, error: String(e) });
     }
@@ -150,23 +211,36 @@ export async function flushSave() {
   // ticks must not keep a manual save waiting forever during active gameplay.
   while (true) {
     const status = useGame.getState().online;
-    if (ticket !== generation || !status.active) throw Error("Bản lưu đã chuyển chế độ. Hãy lưu lại ở chế độ hiện tại.");
-    if (status.status === "error") throw Error(status.error || "Chưa lưu được lên máy chủ.");
+    if (ticket !== generation || !status.active)
+      throw Error("Bản lưu đã chuyển chế độ. Hãy lưu lại ở chế độ hiện tại.");
+    if (status.status === "error")
+      throw Error(status.error || "Chưa lưu được lên máy chủ.");
     if (finishedRequests >= target) return;
-    if (Date.now() >= deadline) throw Error("Máy chủ chưa xác nhận lưu. Vui lòng kiểm tra kết nối và thử lại.");
+    if (Date.now() >= deadline)
+      throw Error(
+        "Máy chủ chưa xác nhận lưu. Vui lòng kiểm tra kết nối và thử lại.",
+      );
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
 }
 if (typeof window !== "undefined") {
   window.addEventListener("may-account-change", () => {
     const { online, leaveOnline } = useGame.getState();
-    if (online.active && online.userId !== getSession()?.user.id) void leaveOnline();
+    if (online.active && online.userId !== getSession()?.user.id)
+      void leaveOnline();
   });
   window.addEventListener("offline", () => {
     const { online } = useGame.getState();
     if (online.active) {
       cancelQueue();
-      useGame.setState({ online: { ...online, status: "error", error: "Mất kết nối. Tiến trình server chưa được ghi đè; hãy kết nối mạng và tải lại bản online." } });
+      useGame.setState({
+        online: {
+          ...online,
+          status: "error",
+          error:
+            "Mất kết nối. Tiến trình server chưa được ghi đè; hãy kết nối mạng và tải lại bản online.",
+        },
+      });
     }
   });
 }

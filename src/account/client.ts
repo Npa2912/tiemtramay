@@ -104,6 +104,8 @@ export async function updateProfile(name: string) {
   window.dispatchEvent(new Event("may-account-change"));
 }
 export async function cloudAction(action: Action | null, revision: number | null, requestId = crypto.randomUUID()): Promise<CloudSave> {
-  await restoreSession();
+  if (!accountConfigured) throw Error("Chưa cấu hình dịch vụ tài khoản.");
+  if (!session) throw Error("Hãy đăng nhập để tải tiến trình tài khoản.");
+  if (session.expires_at <= Date.now()/1000+60) await restoreSession();
   return request("/functions/v1/game", { method: "POST", body: JSON.stringify({ action, revision, requestId }) });
 }

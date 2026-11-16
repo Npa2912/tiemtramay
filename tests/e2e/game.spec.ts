@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+test.beforeEach(async ({page}) => { await page.addInitScript(() => {sessionStorage.setItem('may.guest','1');sessionStorage.setItem('may.qa.seed','4271');}); });
+
 const browserFaults = new WeakMap<Page, string[]>();
 test.beforeEach(async ({ page }) => {
   const faults: string[] = [];
@@ -12,6 +14,7 @@ test.afterEach(async ({ page }) => {
   expect(browserFaults.get(page) ?? []).toEqual([]);
 });
 async function start(page: Page) {
+  await page.addInitScript(()=>{sessionStorage.setItem('may.guest','1');sessionStorage.setItem('may.qa.seed','4271');});
   await page.goto("/");
   await expect(page.getByRole("button", { name: "Mở cửa tiệm" })).toBeVisible();
 }

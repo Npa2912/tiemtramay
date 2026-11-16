@@ -43,6 +43,13 @@ export class Bot {
     }
     return this;
   }
+  resolveIncidents() {
+    if (this.state.incidents?.powerLeft)
+      for (let i = 0; i < 60; i++) this.act({ type: "tick", dt: 1 });
+    if (this.state.incidents?.machineBroken)
+      this.act({ type: "security", id: "backup" });
+    return this;
+  }
   brew(wrong = false) {
     const r = this.state.orders[0].recipe;
     this.act({ type: "cup", size: r.size });
@@ -51,6 +58,20 @@ export class Bot {
       tea: wrong ? (r.tea === "milk" ? "black" : "milk") : r.tea,
       dt: 0.85 / 0.32,
     });
+    this.resolveIncidents();
+    if (this.state.cup && this.state.cup.fill < 0.77)
+      this.act({
+        type: "pour",
+        tea: wrong ? (r.tea === "milk" ? "black" : "milk") : r.tea,
+        dt: 0.85 / 0.32,
+      });
+    this.resolveIncidents();
+    if (this.state.cup && this.state.cup.fill < 0.77)
+      this.act({
+        type: "pour",
+        tea: wrong ? (r.tea === "milk" ? "black" : "milk") : r.tea,
+        dt: 0.85 / 0.32,
+      });
     this.act({ type: "top", id: r.topping });
     this.act({ type: "flavor", id: r.flavor });
     this.act({ type: "sugar", value: r.sugar });

@@ -1,3 +1,4 @@
+import { securityActive } from "./incidents";
 import type { State } from "./engine";
 import { customers, recipes, supplies, unlocked } from "./catalog";
 
@@ -211,36 +212,36 @@ export const securityCatalog = [
     id: "lock",
     name: "Khóa chống trộm",
     cost: 20000,
-    day: 4,
-    desc: "Giảm một nửa thất thoát trong sự kiện mất trộm.",
+    day: 1,
+    desc: "Chặn hoàn toàn trộm trong ngày mua. Hôm sau cần mua lại (20.000đ/ngày).",
   },
   {
     id: "camera",
     name: "Camera an ninh",
     cost: 50000,
-    day: 10,
-    desc: "Kiểm tra camera giúp tìm lại tiền thất lạc.",
+    day: 1,
+    desc: "Có hiệu lực 10 ngày tính cả ngày mua. Đối chiếu để thu hồi tiền bị trộm khi camera còn hạn.",
   },
   {
     id: "safe",
     name: "Két tiền",
     cost: 70000,
-    day: 15,
-    desc: "Giới hạn thất thoát mất trộm còn 5.000đ.",
+    day: 1,
+    desc: "Vĩnh viễn: giới hạn tổn thất do trộm còn 5% vốn hiện có thay vì 10%.",
   },
   {
     id: "generator",
     name: "Máy phát điện",
     cost: 60000,
-    day: 8,
-    desc: "Duy trì thiết bị khi mất điện.",
+    day: 1,
+    desc: "Vĩnh viễn: duy trì quầy khi mất điện (20% mỗi ngày); không cần đợi 60 giây.",
   },
   {
     id: "backup",
     name: "Máy dán nắp dự phòng",
-    cost: 35000,
-    day: 6,
-    desc: "Khắc phục sự cố máy mà không mất phí sửa.",
+    cost: 25000,
+    day: 1,
+    desc: "Vĩnh viễn: tự thay máy chính khi hỏng. Hoặc sửa máy chính với giá 50.000đ.",
   },
 ];
 interface Choice {
@@ -266,7 +267,7 @@ export const events: GameEvent[] = [
     story:
       "Mây thấy tiền quầy chưa khớp sổ. Có thể là nhầm lẫn hoặc thất lạc; chưa có bằng chứng để kết luận ai gây ra.",
     day: 4,
-    cooldown: 14,
+    cooldown: 1,
     priority: 3,
     choices: [
       {
@@ -283,7 +284,8 @@ export const events: GameEvent[] = [
       {
         id: "continue",
         label: "Ghi nhận và tiếp tục",
-        description: "Chấp nhận thất thoát tối đa 20.000đ và 5% tiền hiện có.",
+        description:
+          "Mất 10% vốn hiện có; có két tiền thì tối đa 5%, có khóa hôm nay thì không mất tiền.",
       },
     ],
   },
@@ -327,7 +329,8 @@ export const events: GameEvent[] = [
       {
         id: "wait",
         label: "Chờ điện ổn định",
-        description: "Máy dán nắp chậm thêm 0,5 giây hôm nay.",
+        description:
+          "Quầy mất điện 60 giây, có đếm ngược; máy phát giúp tiếp tục hoạt động.",
       },
       {
         id: "notice",
@@ -481,8 +484,8 @@ export const events: GameEvent[] = [
       {
         id: "repair",
         label: "Gọi bảo trì",
-        description: "Chi 12.000đ; máy hoạt động bình thường.",
-        cost: 12000,
+        description: "Chi 50.000đ; máy hoạt động bình thường.",
+        cost: 50000,
       },
       {
         id: "backup",
@@ -493,7 +496,8 @@ export const events: GameEvent[] = [
       {
         id: "manual",
         label: "Vệ sinh thủ công",
-        description: "Máy chậm thêm 0,4 giây hôm nay.",
+        description:
+          "Quầy tạm dừng tới khi sửa 50.000đ hoặc mua máy dự phòng 25.000đ.",
       },
     ],
   },
@@ -858,7 +862,9 @@ export function applyProgression(
       if (roll < 42) {
         const available = events.filter(
           (e) =>
-            e.day <= s.day && s.day - (p.cooldowns[e.id] ?? -999) >= e.cooldown,
+            !["theft", "power", "machine"].includes(e.id) &&
+            e.day <= s.day &&
+            s.day - (p.cooldowns[e.id] ?? -999) >= e.cooldown,
         );
         if (available.length) {
           const weight = available.reduce((n, e) => n + e.priority, 0);
@@ -905,7 +911,7 @@ export function reduceProgression(
     const e = events.find((x) => x.id === p.event?.id),
       c = e?.choices.find((x) => x.id === action.choice);
     if (!e || !c) return s;
-    if (c.requires && !p.security[c.requires]) {
+    if (c.requires && !securityActive(s, c.requires)) {
       s.message = "Cần mua thiết bị phù hợp trước.";
       return s;
     }
@@ -956,8 +962,11 @@ export function reduceProgression(
     let text = c.description;
     switch (e.id) {
       case "theft": {
-        const cap = p.security.safe ? 5000 : p.security.lock ? 10000 : 20000;
-        const loss = Math.min(cap, Math.floor(Math.max(0, s.money) * 0.05));
+        const loss = securityActive(s, "lock")
+          ? 0
+          : Math.floor(
+              Math.max(0, s.money) * (securityActive(s, "safe") ? 0.05 : 0.1),
+            );
         const recovered =
           c.id === "camera"
             ? 1
@@ -976,8 +985,9 @@ export function reduceProgression(
         else s.reputation += 0.1;
         break;
       case "power":
-        if (c.id === "wait") p.boosts.seal = -0.5;
-        else if (c.id === "notice") s.reputation -= 0.03;
+        if (c.id === "wait") {
+          if (s.incidents) s.incidents.powerLeft = 60;
+        } else if (c.id === "notice") s.reputation -= 0.03;
         break;
       case "inspection":
         if (c.id === "clean") s.reputation += 0.05;
@@ -1016,7 +1026,7 @@ export function reduceProgression(
         if (c.id === "return") p.metrics.regulars++;
         break;
       case "machine":
-        if (c.id === "manual") p.boosts.seal = -0.4;
+        if (c.id === "manual" && s.incidents) s.incidents.machineBroken = true;
         break;
       case "rival":
         if (c.id === "quality") p.boosts.patience += 5;
@@ -1038,7 +1048,7 @@ export function reduceProgression(
     updateMetrics(s);
     return s;
   }
-  if (s.phase === "open") {
+  if (s.phase === "open" && action.type !== "security") {
     s.message = "Hãy kết sổ để tuyển dụng, đào tạo hoặc mua thiết bị.";
     return s;
   }
@@ -1046,7 +1056,7 @@ export function reduceProgression(
     const item = securityCatalog.find((x) => x.id === action.id);
     if (
       item &&
-      !p.security[item.id] &&
+      !securityActive(s, item.id) &&
       s.day >= item.day &&
       s.money >= item.cost
     ) {

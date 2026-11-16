@@ -4,9 +4,9 @@
 
 Frontend có đăng ký, đăng nhập, xác minh email theo cấu hình Supabase, khôi phục/đặt lại mật khẩu, duy trì và làm mới phiên, đăng xuất, hồ sơ và đổi tên chủ quán. Không lưu mật khẩu. Token phiên theo cơ chế browser được giữ trên origin hiện tại; cần tránh XSS và bật chính sách mật khẩu/rate limit của Supabase.
 
-**Chưa có dự án Supabase hoặc môi trường Vercel để xác minh thực tế. Không được coi tài khoản, email hay đồng bộ đa thiết bị đã qua kiểm thử tích hợp.** Gameplay mặc định chạy bằng IndexedDB. Sau đăng nhập, nút “Chơi online” chuyển sang tiến trình riêng trên máy chủ; giao dịch chỉ cập nhật sau phản hồi server. Đăng nhập không tự động biến save local thành save server và không tự ghi đè tiến trình cũ.
+**Chưa có dự án Supabase hoặc môi trường Vercel để xác minh thực tế. Không được coi tài khoản, email hay đồng bộ đa thiết bị đã qua kiểm thử tích hợp.** Trang đầu là giao diện đăng nhập/đăng ký. Sau đăng nhập hoặc khi khôi phục phiên, game tự tải tiến trình riêng từ server; giao dịch chỉ cập nhật sau phản hồi server. Chế độ khách chỉ mở khi người chơi chủ động chọn “Tiếp tục chơi trên thiết bị”. Đăng nhập không tự động biến save local thành save server và không tự ghi đè tiến trình cũ.
 
-SQL có RLS, quyền đọc đúng tài khoản, đổi tên riêng và RPC commit chỉ dành cho service-role. Edge Function tạo save server mới đúng 1.000.000đ một lần, chạy reducer từ mã nguồn thay vì tin số dư/snapshot trình duyệt, dùng revision CAS và request ID chống ghi đè/nhận thưởng lặp. Hạ tầng và transport trong store đã kết nối qua chế độ opt-in, nhưng cần triển khai và kiểm thử thật trước khi xác nhận online hoạt động. Không bật đồng bộ snapshot toàn bộ save client: cách đó cho phép sửa tiền tùy ý.
+SQL có RLS, quyền đọc đúng tài khoản, đổi tên riêng và RPC commit chỉ dành cho service-role. Edge Function tạo save server mới đúng 1.000.000đ một lần, chạy reducer từ mã nguồn thay vì tin số dư/snapshot trình duyệt, dùng revision CAS và request ID chống ghi đè/nhận thưởng lặp. Hạ tầng và transport trong store đã kết nối qua luồng đăng nhập tự động, nhưng cần triển khai và kiểm thử thật trước khi xác nhận online hoạt động. Không bật đồng bộ snapshot toàn bộ save client: cách đó cho phép sửa tiền tùy ý.
 
 ## Thiết lập dự án thử nghiệm
 
@@ -20,7 +20,7 @@ SQL có RLS, quyền đọc đúng tài khoản, đổi tên riêng và RPC comm
    ```
 
    Không đưa `SUPABASE_SERVICE_ROLE_KEY` vào bất kỳ biến `VITE_` nào. Không commit `.env.local` hoặc key thật. Public key vẫn cần RLS; key không thay thế authorization.
-4. Từ `/workspace/tiemtramay`, tạo lại shared reducer sau mọi thay đổi engine/catalog:
+4. Từ `/workspace/tiemtramay`, tạo lại shared reducer sau mọi thay đổi engine/catalog/progression/incidents:
 
    ```sh
    ./node_modules/.bin/esbuild src/engine.ts --bundle --format=esm --platform=neutral --outfile=supabase/functions/_shared/engine.js
@@ -33,7 +33,7 @@ SQL có RLS, quyền đọc đúng tài khoản, đổi tên riêng và RPC comm
 
 `src/account/client.ts` cung cấp `cloudAction(action, revision, requestId?)` và `cloudAction(null, null)` để đọc/tạo save server. Response là `{state, revision}`. Chỉ áp dụng state sau phản hồi server thành công; không thực hiện giao dịch tiền local trước rồi coi là thành công. Giữ request ID khi retry cùng lệnh. Gặp HTTP 409 phải tải lại bản server và cho người chơi quyết định tiếp tục; không âm thầm ghi đè. Dùng queue tuần tự, gộp tick/pour phù hợp độ trễ mạng, hiển thị trạng thái sync và khóa giao dịch online khi ngoại tuyến. Tick/pour thời gian do server tính, không dùng dt client làm nguồn tin.
 
-UI mặc định giữ chế độ chơi local. Nút “Chơi online” chỉ khả dụng khi có cấu hình và đăng nhập. Lỗi đồng bộ dừng lệnh mới; nút tải lại online đọc bản server. Thoát online hoặc đăng xuất khôi phục snapshot guest, không ghi đè guest bằng cloud. Cơ chế queue/coalescing có unit test bằng mock, chưa được xác minh với độ trễ máy chủ thật. Legacy save local không có chữ ký nên không thể được nhập thành số dư server đáng tin cậy mà vẫn bảo đảm chống sửa tiền. Cần chính sách xác minh/import rõ ràng; giữ backup, hiển thị preview, xác nhận và không xóa bản local. Chưa triển khai import legacy online.
+UI mở màn hình tài khoản trước. Đăng nhập thành công tự vào tiến trình server; tải lại trang khôi phục phiên và đọc lại server. Nếu tải cloud lỗi, không chuyển nhầm sang guest. Lỗi đồng bộ dừng lệnh mới; nút tải lại online đọc bản server. Đăng xuất quay về màn hình tài khoản. Save guest vẫn được giữ riêng, không ghi đè guest bằng cloud. Cơ chế queue/coalescing có unit test bằng mock, chưa được xác minh với độ trễ máy chủ thật. Legacy save local không có chữ ký nên không thể được nhập thành số dư server đáng tin cậy mà vẫn bảo đảm chống sửa tiền. Cần chính sách xác minh/import rõ ràng; giữ backup, hiển thị preview, xác nhận và không xóa bản local. Chưa triển khai import legacy online.
 
 ## Kiểm thử bắt buộc trước phát hành online
 
@@ -48,3 +48,9 @@ UI mặc định giữ chế độ chơi local. Nút “Chơi online” chỉ kh
 - Test timestamp/pour với latency thực; offline progression phải có chính sách server riêng trước khi bật.
 
 Unit tests local (tests/account.test.ts, tests/cloud-security.test.ts, tests/cloud-store.test.ts) xác minh validation tên/mật khẩu, chặn request không có auth, không tin user ID/số dư client, CAS/idempotency ở transport, giữ guest save và dừng khi sync lỗi bằng mock. Các test này không thay thế kiểm thử SQL/RLS/RPC thật trên Supabase/Vercel.
+
+## Kiểm thử hợp đồng trình duyệt
+
+`npm run test:accounts` dùng cấu hình test riêng cổng 5175 và public key giả, chặn request bằng Playwright để mô phỏng dịch vụ. Luồng kiểm tra: đăng ký → tự vào game online → mua vật tư → đăng nhập cùng tài khoản trên context thứ hai → tải đúng số dư → mất mạng/kết nối lại/reload → tài khoản thứ hai có tiến trình riêng. Có kiểm tra sai mật khẩu, xác nhận mật khẩu sai và server lỗi không rơi sang guest. Đây là kiểm thử hợp đồng với server mô phỏng, không chứng nhận Supabase Auth/email/SQL/RLS trên dịch vụ thật.
+
+Sau khi cập nhật backend, chạy `npm run build:server`, deploy lại Edge Function `game` cùng migration trước khi build frontend. Các trạng thái sự cố, thời hạn khóa/camera và đếm ngược nằm trong save server nên theo tài khoản qua thiết bị, không theo địa chỉ IP.

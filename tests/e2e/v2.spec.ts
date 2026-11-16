@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+test.beforeEach(async ({page}) => { await page.addInitScript(() => {sessionStorage.setItem('may.guest','1');sessionStorage.setItem('may.qa.seed','4271');}); });
+
 
 async function buyOpeningStock(page: Page) {
   await page.getByRole("button", { name: "Nhập nguyên liệu", exact: true }).click();

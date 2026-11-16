@@ -1,12 +1,19 @@
 // Loaded only by Vite development builds with ?qa=1. Tree-shaken out of production.
 import { Bot } from "./bot";
 import { useGame, flushSave } from "../store";
-import { invariant, initial, type Action, type State } from "../engine";
+import {
+  invariant,
+  initial,
+  validate,
+  type Action,
+  type State,
+} from "../engine";
 import { load } from "../persistence";
 export interface QA {
   reset: (seed: number) => void;
   act: (a: Action) => void;
   inspect: () => State;
+  setIncidents: (patch: Partial<NonNullable<State["incidents"]>>) => void;
   brew: (wrong?: boolean) => void;
   simulateDays: (
     count: number,
@@ -25,6 +32,12 @@ window.mayQA = {
     invariant(useGame.getState().game);
   },
   inspect: () => structuredClone(useGame.getState().game),
+  setIncidents: (patch) => {
+    const s = structuredClone(useGame.getState().game);
+    s.incidents = { ...s.incidents!, ...patch };
+    if (!validate(s)) throw Error("Invalid incident fixture");
+    useGame.getState().replace(s);
+  },
   brew: (wrong) => {
     const bot = new Bot();
     bot.state = structuredClone(useGame.getState().game);

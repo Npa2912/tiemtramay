@@ -70,11 +70,11 @@ describe("progression and event engine", () => {
         .progression.event,
     ).not.toBeNull();
     s = reduceProgression(s, { type: "eventChoice", choice: "continue" });
-    expect(s.money).toBe(9500);
+    expect(s.money).toBe(9000);
     expect(s.progression.eventHistory).toHaveLength(1);
     expect(
       reduceProgression(s, { type: "eventChoice", choice: "continue" }).money,
-    ).toBe(9500);
+    ).toBe(9000);
   });
   it("camera resolves discrepancy without blaming staff or losing money", () => {
     let s = prepared();
@@ -165,7 +165,7 @@ describe("progression and event engine", () => {
     let s = prepared();
     s.progression.event = { id: "power", day: 15 };
     s = reduceProgression(s, { type: "eventChoice", choice: "wait" });
-    expect(s.progression.boosts.seal).toBe(-0.5);
+    expect(s.incidents?.powerLeft).toBe(60);
     expect(validProgression(s.progression)).toBe(true);
     expect(() => migrateProgression(s)).not.toThrow();
   });
@@ -291,14 +291,14 @@ describe("progression and event engine", () => {
     const s = prepared();
     s.progression.event = { id: "machine", day: s.day };
     const repaired = reduce(s, { type: "eventChoice", choice: "repair" });
-    expect(repaired.money).toBe(988000);
-    expect(repaired.progression?.eventExpenses).toBe(12000);
+    expect(repaired.money).toBe(950000);
+    expect(repaired.progression?.eventExpenses).toBe(50000);
     const summary = reduce(repaired, { type: "close" });
-    expect(summary.stats.expenses).toBe(20000);
-    expect(summary.stats.profit).toBe(-20000);
-    expect(summary.history.at(-1)?.expenses).toBe(20000);
+    expect(summary.stats.expenses).toBe(58000);
+    expect(summary.stats.profit).toBe(-58000);
+    expect(summary.history.at(-1)?.expenses).toBe(58000);
     expect(summary.progression?.eventExpenses).toBe(0);
-    expect(reduce(summary, { type: "close" }).stats.expenses).toBe(20000);
+    expect(reduce(summary, { type: "close" }).stats.expenses).toBe(58000);
     const next = reduce(summary, { type: "next" });
     expect(next.stats.expenses).toBe(0);
     expect(next.progression?.eventExpenses).toBe(0);
@@ -308,8 +308,8 @@ describe("progression and event engine", () => {
     let summary = reduce(s, { type: "close" });
     summary.progression!.event = { id: "machine", day: s.day };
     summary = reduce(summary, { type: "eventChoice", choice: "repair" });
-    expect(summary.stats.expenses).toBe(20000);
-    expect(summary.history.at(-1)?.expenses).toBe(20000);
+    expect(summary.stats.expenses).toBe(58000);
+    expect(summary.history.at(-1)?.expenses).toBe(58000);
     expect(summary.progression?.eventExpenses).toBe(0);
     expect(validProgression(summary.progression)).toBe(true);
   });

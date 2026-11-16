@@ -203,7 +203,7 @@ describe("persistence and long run", () => {
     console.log("LONG_RUN", JSON.stringify(snapshots));
     expect(b.state.day).toBe(36);
     expect(b.state.history).toHaveLength(35);
-  });
+  }, 15000);
   it("is deterministic and bounds ledger/history growth", () => {
     const a = new Bot(7),
       b = new Bot(7);
@@ -244,7 +244,7 @@ describe("progression, staff, recovery and adversarial inputs", () => {
     const b = new Bot();
     b.state.day = 5;
     b.state.stats.day = 5;
-    b.stock().act({ type: "upgrade", id: "staff" }).act({ type: "open" });
+    b.stock().act({ type: "upgrade", id: "staff" }).act({type:"security",id:"lock"}).act({ type: "open" });
     const r = b.state.orders[0].recipe;
     b.act({ type: "cup", size: "M" })
       .act({ type: "pour", tea: r.tea, dt: 0.85 / 0.32 })

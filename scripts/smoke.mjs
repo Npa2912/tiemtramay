@@ -47,6 +47,7 @@ try {
     if (r.status() >= 400) errors.push(`${r.status()} ${r.url()}`);
   });
   await page.goto(`http://127.0.0.1:${port}/?qa=1`);
+  await page.getByRole("button", {name:"Tiếp tục chơi trên thiết bị",exact:true}).click();
   await page.getByRole("button", { name: "Mở cửa tiệm" }).waitFor();
   if ((await page.evaluate(() => typeof window.mayQA)) !== "undefined")
     throw Error("QA bridge leaked into production");
@@ -69,6 +70,9 @@ try {
       .getByRole("button")
       .click();
   await page.getByRole("button", { name: "Đóng cửa sổ" }).click();
+  await page.locator(".bottom-nav").getByRole("button", {name:"Sự kiện",exact:true}).click();
+  for (const name of ["Khóa chống trộm","Máy phát điện","Máy dán nắp dự phòng"]) await page.locator(".upgrade-card").filter({has:page.getByText(name,{exact:true})}).getByRole("button").click();
+  await page.getByRole("button", {name:"Đóng cửa sổ"}).click();
   await page.getByRole("button", { name: "Mở cửa tiệm" }).click();
   await page.locator(".order-heading").waitFor();
   await page.getByRole("button", { name: "Chọn ly M", exact: true }).click();

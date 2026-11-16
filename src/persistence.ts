@@ -39,14 +39,25 @@ export function save(s: State) {
     });
   return pending;
 }
+export function freshSeed() {
+  if (import.meta.env.DEV && typeof sessionStorage !== "undefined") {
+    const fixed = sessionStorage.getItem("may.qa.seed");
+    if (fixed && /^\d{1,10}$/.test(fixed)) return Number(fixed) >>> 0;
+  }
+  return crypto.getRandomValues(new Uint32Array(1))[0];
+}
 export async function load() {
   const row = await db.saves.get("main");
-  if (!row) return initial();
+  if (!row) return initial(freshSeed());
   if (!validate(row.data))
     throw Error("Bản lưu không hợp lệ. Hãy nhập một bản JSON dự phòng.");
   if (!row.data.progression) {
     // Keep the original before adding the optional 2.0 progression schema.
-    if (!(await db.backups.get("before-v2"))) await db.backups.put({ id: "before-v2", data: structuredClone(row.data) });
+    if (!(await db.backups.get("before-v2")))
+      await db.backups.put({
+        id: "before-v2",
+        data: structuredClone(row.data),
+      });
     return migrateProgression(row.data);
   }
   return row.data;
