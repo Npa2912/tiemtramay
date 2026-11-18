@@ -2,7 +2,7 @@ import { test, expect, type Page } from "@playwright/test";
 async function setup(
   page: Page,
   kind: "power" | "machine" | "theft",
-  camera = false,
+  equipment?: "Camera an ninh" | "Máy dán nắp dự phòng",
 ) {
   await page.goto("/?qa=1");
   await page
@@ -27,14 +27,14 @@ async function setup(
       .getByRole("button")
       .click();
   await page.getByRole("button", { name: "Đóng cửa sổ" }).click();
-  if (camera) {
+  if (equipment) {
     await page
       .locator(".bottom-nav")
       .getByRole("button", { name: "Sự kiện", exact: true })
       .click();
     await page
       .locator(".upgrade-card")
-      .filter({ has: page.getByText("Camera an ninh", { exact: true }) })
+      .filter({ has: page.getByText(equipment, { exact: true }) })
       .getByRole("button")
       .click();
     await page.getByRole("button", { name: "Đóng cửa sổ" }).click();
@@ -90,7 +90,7 @@ test("blackout really darkens the cafe, counts down and resumes unchanged drink 
     10,
   );
 });
-test("broken sealer offers50k repair or25k backup, charges once and keeps the cup", async ({
+test("broken sealer offers 50k repair and preserves the cup", async ({
   page,
 }) => {
   await setup(page, "machine");
@@ -102,17 +102,47 @@ test("broken sealer offers50k repair or25k backup, charges once and keeps the cu
   ).toBeEnabled();
   const money = await page.locator(".wallet b").innerText();
   const before = Number(money.replace(/\D/g, ""));
-  await page.screenshot({ path: "screenshots/update-machine-repair.png" });
-  await page
-    .getByRole("button", { name: "Máy dự phòng · 25.000đ", exact: true })
-    .click();
+  const dialog = page.getByRole("dialog", { name: "Sự cố thiết bị" });
+  await expect(dialog.getByRole("button", { name: /máy dự phòng|kết sổ/i })).toHaveCount(0);
+  await page.getByRole("button", { name: "Sửa máy · 50.000đ", exact: true }).click();
   await expect(
     page.getByRole("dialog", { name: "Sự cố thiết bị" }),
   ).toHaveCount(0);
   await expect(page.locator(".wallet b")).toHaveText(
-    (before - 25000).toLocaleString("vi-VN") + "đ",
+    (before - 50000).toLocaleString("vi-VN") + "đ",
   );
   await expect(page.getByTestId("fill")).toContainText("0%");
+});
+test("an owned backup can resume the shift without a new charge", async ({ page }) => {
+  await setup(page, "machine", "Máy dán nắp dự phòng");
+  const dialog = page.getByRole("dialog", { name: "Sự cố thiết bị" });
+  const balance = await page.locator(".wallet b").innerText();
+  await dialog.getByRole("button", { name: "Dùng máy dự phòng", exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".wallet b")).toHaveText(balance);
+  await expect(page.getByRole("button", { name: "Chọn ly M" })).toBeDisabled();
+});
+test("short on cash: advances the exact shortfall and continues the same shift", async ({
+  page,
+}) => {
+  await setup(page, "machine");
+  await page.evaluate(() => {
+    const qa = window.mayQA!;
+    qa.replace({ ...qa.inspect(), money: 30000 });
+  });
+  const dialog = page.getByRole("dialog", { name: "Sự cố thiết bị" });
+  await expect(dialog.getByRole("button", { name: /Sửa máy · 50.000đ/ })).toBeDisabled();
+  await dialog.getByRole("button", { name: "Ứng 20.000đ & sửa máy" }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.locator(".wallet b")).toHaveText("0đ");
+  const state = await page.evaluate(() => window.mayQA!.inspect());
+  expect(state.debt).toBe(20000);
+  expect(state.phase).toBe("open");
+  expect(state.cup?.size).toBe("M");
+  await page.getByTestId("pour").focus();
+  await page.keyboard.down("Space");
+  await expect.poll(async () => parseInt(await page.getByTestId("fill").innerText())).toBeGreaterThan(0);
+  await page.keyboard.up("Space");
 });
 test("lock bought in real inventory UI prevents daily theft and expires on next day", async ({
   page,
@@ -146,7 +176,7 @@ test("lock bought in real inventory UI prevents daily theft and expires on next 
 test("camera recovery remains accessible in events after dismissing the theft notification", async ({
   page,
 }) => {
-  await setup(page, "theft", true);
+  await setup(page, "theft", "Camera an ninh");
   const stolen = await page.evaluate(
     () => window.mayQA!.inspect().incidents!.theft!.amount,
   );

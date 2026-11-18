@@ -26,7 +26,7 @@ Mở địa chỉ Vite in ra (thường `http://localhost:5173`). Bản producti
 1. Nếu bấm Mở cửa khi thiếu hàng, game sẽ mở Kho và liệt kê chính xác vật tư cần nhập. Ngày đầu mở Kho, mua mỗi loại một gói: trà sữa, hồng trà, sữa, đường, đá, trân châu, ly M, nắp. Tổng 178.000đ; vốn ban đầu 1.000.000đ.
 2. Đóng Kho, mở tiệm. Đọc loại trà, size, topping, hương, đường, đá trong đơn khách.
 3. Chọn ly, chọn bình, **nhấn giữ** “Giữ để rót”. Thả ở **77–93%**, lý tưởng 85%. Cảm ứng và bàn phím Space/Enter đều được hỗ trợ. Chỉ chọn bình không tự rót.
-4. Thêm topping, chọn hương (kể cả Nguyên vị), chọn đường và đá. Dán nắp, chờ máy hoàn tất rồi giao.
+4. Thêm topping, chọn hương (kể cả Nguyên vị), chọn đường và đá. Dán nắp rồi giao ngay. Nếu máy hỏng, sửa với 50.000đ, dùng máy dự phòng đã có hoặc ứng phần tiền còn thiếu.
 5. Không đúng đơn sẽ nhận ít tiền và giảm đánh giá. Khách chờ quá lâu sẽ bỏ đi. Bỏ ly không hoàn lại vật tư.
 6. Phục vụ hết khách để tự tổng kết; có thể kết sổ sớm. Xem giá vốn, phí và lợi nhuận. Nâng cấp, nhập kho rồi sang ngày mới.
 7. Trà, topping và hương mới cần mua nâng cấp khi tới ngày mở. Size L cũng cần nâng cấp. Từ ngày 21 có nhóm công thức cuối. Sau ngày 30 vẫn tiếp tục.
@@ -59,7 +59,7 @@ src/
   engine.ts         Reducer thuần, kinh tế, hàng chờ, chấm điểm, kiểm tra save
   persistence.ts    Dexie schema 1 → 2, ghi tuần tự, import validation
   store.ts          Zustand, autosave
-  Counter.tsx       Phaser, ly / trà / topping / đá / máy nắp / nhân viên
+  Counter.tsx       Canvas 2D, ly / trà / topping / đá / máy nắp / nhân viên
   audio.ts          Âm thanh và giai điệu tự tạo bằng Web Audio
   App.tsx           Giao diện tiếng Việt, cửa sổ quản lý và input
   style.css         Responsive, giao diện pastel

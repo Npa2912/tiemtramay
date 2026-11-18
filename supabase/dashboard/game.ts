@@ -55,6 +55,11 @@ function securityActive(s, id) {
   const expiry = s.incidents?.expires[id];
   return expiry === void 0 || expiry >= s.day;
 }
+function preventsMachineBreakdown(s) {
+  const barista = s.progression?.staff.barista;
+  const maintenance = 0.1 * (s.upgrades.sealer ?? 0) + 0.1 * (s.upgrades.staff ?? 0) + (barista?.active ? 0.05 * barista.level : 0);
+  return maintenance > 0 && dailyRoll(s.seed, s.day, 404) < maintenance;
+}
 function productionBlocked(s) {
   return !!s.incidents && (s.incidents.machineBroken || s.incidents.powerLeft > 0 && !securityActive(s, "generator"));
 }
@@ -130,16 +135,35 @@ function interceptIncident(input, a) {
     }
     return s;
   }
-  if (a.type === "repairMachine") {
+  if (a.type === "security" && a.id === "backup" && i.machineBroken) {
+    return source;
+  }
+  if (a.type === "repairMachine" || a.type === "advanceRepair" || a.type === "useBackup") {
+    if (!i.machineBroken) return source;
     const s = structuredClone(source);
-    if (!s.incidents.machineBroken) return s;
-    if (s.money < 5e4) {
-      s.message = "C\u1EA7n 50.000\u0111 \u0111\u1EC3 s\u1EEDa m\xE1y, ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111.";
-      return s;
+    if (a.type === "useBackup") {
+      if (!securityActive(s, "backup")) return source;
+    } else {
+      const shortfall = Math.max(0, Math.ceil(5e4 - s.money));
+      if (a.type === "advanceRepair") {
+        if (!shortfall) return source;
+        s.money += shortfall;
+        s.debt += shortfall;
+        s.ledger = [...s.ledger, {
+          day: s.day,
+          kind: "\u1EE8ng ti\u1EC1n s\u1EEDa m\xE1y (kh\xF4ng l\xE3i)",
+          amount: shortfall
+        }].slice(-600);
+      } else if (shortfall) {
+        s.message = "C\u1EA7n 50.000\u0111 \u0111\u1EC3 s\u1EEDa m\xE1y. C\xF3 th\u1EC3 \u1EE9ng ph\u1EA7n c\xF2n thi\u1EBFu.";
+        return s;
+      }
+      expense(s, "S\u1EEDa m\xE1y d\xE1n n\u1EAFp", 5e4);
     }
-    expense(s, "S\u1EEDa m\xE1y d\xE1n n\u1EAFp", 5e4);
     s.incidents.machineBroken = false;
-    s.incidents.notice = "M\xE1y \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa. Ti\u1EBFp t\u1EE5c pha ly \u0111ang l\xE0m nh\xE9!";
+    if (s.phase === "open") s.paused = false;
+    s.incidents.notice = a.type === "useBackup" ? "M\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 ti\u1EBFp qu\u1EA3n. Ti\u1EBFp t\u1EE5c pha ly \u0111ang l\xE0m nh\xE9!" : "M\xE1y \u0111\xE3 \u0111\u01B0\u1EE3c s\u1EEDa. Ti\u1EBFp t\u1EE5c pha ly \u0111ang l\xE0m nh\xE9!";
+    s.message = s.incidents.notice;
     return s;
   }
   if (a.type === "tick" && productionBlocked(source) && source.phase === "open") {
@@ -167,14 +191,14 @@ function interceptIncident(input, a) {
       s.incidents.notice = s.message;
       if (s.incidents.powerLeft > 0) return s;
     }
-    if (!i.machineChecked && i.machinePlanned && !securityActive(source, "backup")) {
+    if (!i.machineChecked && i.machinePlanned && !preventsMachineBreakdown(source)) {
       const s = structuredClone(source);
       s.incidents.machineChecked = true;
       s.incidents.machineBroken = true;
       history(
         s,
         "machine",
-        "M\xE1y d\xE1n n\u1EAFp b\u1ECB h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111."
+        "M\xE1y d\xE1n n\u1EAFp b\u1ECB h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c d\xF9ng m\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 c\xF3."
       );
       s.incidents.notice = s.message;
       return s;
@@ -239,11 +263,11 @@ function afterIncidents(previous, next, a) {
     if (!current.machineChecked) {
       current.machineChecked = true;
       if (current.machinePlanned) {
-        current.machineBroken = !securityActive(s, "backup");
+        current.machineBroken = !preventsMachineBreakdown(s);
         history(
           s,
           "machine",
-          current.machineBroken ? "M\xE1y h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111." : "M\xE1y ch\xEDnh h\u1ECFng; m\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 ti\u1EBFp qu\u1EA3n."
+          current.machineBroken ? "M\xE1y h\u1ECFng! S\u1EEDa 50.000\u0111 ho\u1EB7c d\xF9ng m\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 c\xF3." : "M\xE1y \u0111\u01B0\u1EE3c b\u1EA3o tr\xEC k\u1ECBp th\u1EDDi, qu\u1EA7y ti\u1EBFp t\u1EE5c ho\u1EA1t \u0111\u1ED9ng."
         );
         current.notice = s.message;
       }
@@ -330,7 +354,7 @@ var upgrades = [
   {
     id: "sealer",
     name: "M\xE1y d\xE1n n\u1EAFp",
-    desc: "M\u1ED7i c\u1EA5p gi\u1EA3m 0,35 gi\xE2y",
+    desc: "M\u1ED7i c\u1EA5p ng\u0103n 10% s\u1EF1 c\u1ED1 m\xE1y d\xE1n n\u1EAFp",
     price: 18e3,
     day: 1,
     max: 3
@@ -362,7 +386,7 @@ var upgrades = [
   {
     id: "staff",
     name: "B\u1EA1n \u0111\u1ED3ng h\xE0nh",
-    desc: "H\u1ED7 tr\u1EE3 m\xE1y n\u1EAFp, l\u01B0\u01A1ng 8.000\u0111/ng\xE0y",
+    desc: "Ng\u0103n 10% s\u1EF1 c\u1ED1 m\xE1y n\u1EAFp, l\u01B0\u01A1ng 8.000\u0111/ng\xE0y",
     price: 3e4,
     day: 5,
     max: 1
@@ -650,7 +674,7 @@ var staffCatalog = [
     day: 5,
     cost: 45e3,
     wage: 4e3,
-    desc: "Gi\u1EA3m th\u1EDDi gian d\xE1n n\u1EAFp 0,15 gi\xE2y/c\u1EA5p."
+    desc: "Ng\u0103n th\xEAm 5% s\u1EF1 c\u1ED1 m\xE1y d\xE1n n\u1EAFp m\u1ED7i c\u1EA5p."
   },
   {
     id: "cashier",
@@ -948,7 +972,7 @@ var events = [
       {
         id: "manual",
         label: "V\u1EC7 sinh th\u1EE7 c\xF4ng",
-        description: "Qu\u1EA7y t\u1EA1m d\u1EEBng t\u1EDBi khi s\u1EEDa 50.000\u0111 ho\u1EB7c mua m\xE1y d\u1EF1 ph\xF2ng 25.000\u0111."
+        description: "Qu\u1EA7y t\u1EA1m d\u1EEBng t\u1EDBi khi s\u1EEDa m\xE1y ho\u1EB7c chuy\u1EC3n sang m\xE1y d\u1EF1 ph\xF2ng \u0111\xE3 c\xF3."
       }
     ]
   },
@@ -1196,11 +1220,6 @@ function applyProgression(previous, next, action) {
     p.metrics.upgrades++;
   if (action.type === "decor" && JSON.stringify(s.decor) !== JSON.stringify(previous.decor))
     p.metrics.decorations++;
-  if (action.type === "seal" && s.cup && previous.cup && s.cup.sealLeft > previous.cup.sealLeft)
-    s.cup.sealLeft = Math.max(
-      0.25,
-      s.cup.sealLeft - 0.15 * level(p, "barista") - p.boosts.seal
-    );
   const oldIds = new Set(previous.orders.map((o) => o.id));
   for (const o of s.orders)
     if (!oldIds.has(o.id)) {
@@ -1646,10 +1665,41 @@ var progressionActions = /* @__PURE__ */ new Set([
   "ownerName",
   "reducedMotion"
 ]);
+function pourTea(s, a) {
+  const c = s.cup;
+  const say = (message) => ({ ...s, message });
+  if (!teas.some((t) => t.id === a.tea) || !unlocked(s, a.tea) || !Number.isFinite(a.dt))
+    return s;
+  if (c.sealed || c.sealLeft > 0 || c.fill >= 1.1) return s;
+  if (c.tea && c.tea !== a.tea)
+    return say("Kh\xF4ng tr\u1ED9n hai lo\u1EA1i tr\xE0 trong c\xF9ng ly.");
+  const amount = Math.min(Math.max(0, a.dt) * 0.32, 1.1 - c.fill);
+  const qty = amount * (c.size === "L" ? 1.5 : 1);
+  if (quantity(s, a.tea) < qty || a.tea === "milk" && quantity(s, "milkPowder") < qty * 0.3)
+    return say("\u0110\xE3 h\u1EBFt nguy\xEAn li\u1EC7u c\u1EE7a b\xECnh n\xE0y.");
+  const next = {
+    ...s,
+    cup: { ...c },
+    stats: { ...s.stats },
+    stock: { ...s.stock, [a.tea]: s.stock[a.tea]?.map((lot) => ({ ...lot })) ?? [] }
+  };
+  if (a.tea === "milk") next.stock.milkPowder = s.stock.milkPowder?.map((lot) => ({ ...lot })) ?? [];
+  if (!consume(next, a.tea, qty)) return s;
+  if (a.tea === "milk") consume(next, "milkPowder", qty * 0.3);
+  next.cup.tea = a.tea;
+  next.cup.fill += amount;
+  next.cup.pourAt = s.clock;
+  return next;
+}
 function reduce(input, a) {
   const prepared = ensureIncidents(input);
   const intercepted = interceptIncident(prepared, a);
   if (intercepted) return intercepted;
+  if (a.type === "pour" && prepared.progression && prepared.incidents.day === prepared.day && prepared.incidents.theftChecked && prepared.incidents.machineChecked && prepared.incidents.powerChecked) {
+    if (prepared.phase !== "open" || prepared.paused) return prepared;
+    if (!prepared.cup) return { ...prepared, message: "Ch\u1ECDn m\u1ED9t chi\u1EBFc ly tr\u01B0\u1EDBc nh\xE9." };
+    return pourTea(prepared, a);
+  }
   const next = progressionActions.has(a.type) ? reduceProgression(prepared, a) : applyProgression(prepared, reduceCore(prepared, a), a);
   return afterIncidents(prepared, next, a);
 }
@@ -1758,7 +1808,7 @@ function reduceCore(input, a) {
       s.stock[id] = s.stock[id].filter((l) => l.expires > s.day);
     }
     if (s.debt && s.money > 12e4) {
-      const repaid = Math.min(s.debt, s.money - 1e5);
+      const repaid = Math.min(s.debt, Math.floor(s.money - 1e5));
       s.debt -= repaid;
       log2(s, "Ho\xE0n v\u1ED1n vay", -repaid);
     }
@@ -1825,23 +1875,7 @@ function reduceCore(input, a) {
   if (c.sealed || c.sealLeft > 0) {
     if (a.type !== "serve") return say("Ly \u0111ang d\xE1n ho\u1EB7c \u0111\xE3 c\xF3 n\u1EAFp.");
   }
-  if (a.type === "pour") {
-    if (!teas.some((t) => t.id === a.tea) || !unlocked(s, a.tea) || !Number.isFinite(a.dt))
-      return s;
-    if (c.sealed || c.sealLeft > 0 || c.fill >= 1.1) return s;
-    if (c.tea && c.tea !== a.tea)
-      return say("Kh\xF4ng tr\u1ED9n hai lo\u1EA1i tr\xE0 trong c\xF9ng ly.");
-    const amount = Math.min(Math.max(0, a.dt) * 0.32, 1.1 - c.fill);
-    const qty = amount * (c.size === "L" ? 1.5 : 1);
-    if (quantity(s, a.tea) < qty || a.tea === "milk" && quantity(s, "milkPowder") < qty * 0.3)
-      return say("\u0110\xE3 h\u1EBFt nguy\xEAn li\u1EC7u c\u1EE7a b\xECnh n\xE0y.");
-    if (!consume(s, a.tea, qty)) return s;
-    if (a.tea === "milk") consume(s, "milkPowder", qty * 0.3);
-    c.tea = a.tea;
-    c.fill += amount;
-    c.pourAt = s.clock;
-    return s;
-  }
+  if (a.type === "pour") return pourTea(s, a);
   if (a.type === "top") {
     if (!toppings.some((t) => t.id === a.id) || !unlocked(s, a.id)) return s;
     if (c.topping) return say("Ly \u0111\xE3 c\xF3 topping.");
@@ -1876,15 +1910,12 @@ function reduceCore(input, a) {
     if (!c.tea || c.fill < 0.6 || !c.topping || !c.flavor || c.sugar === null || c.ice === null)
       return say("C\u1EA7n \u0111\u1EE7 tr\xE0 (\u226560%), topping, h\u01B0\u01A1ng v\u1ECB, \u0111\u01B0\u1EDDng v\xE0 \u0111\xE1.");
     if (!consume(s, "lid", 1)) return say("H\u1EBFt n\u1EAFp!");
-    c.sealLeft = Math.max(
-      0.25,
-      1.6 - 0.35 * (s.upgrades.sealer ?? 0) - 0.5 * (s.upgrades.staff ?? 0)
-    );
-    return say("M\xE1y \u0111ang d\xE1n n\u1EAFp\u2026");
+    c.sealed = true;
+    return say("\u0110\xE3 d\xE1n n\u1EAFp. Ly s\u1EB5n s\xE0ng giao kh\xE1ch!");
   }
   if (a.type === "serve") {
     if (!complete(c) || !s.orders.length)
-      return say("Ch\u01B0a th\u1EC3 giao: ho\xE0n th\xE0nh ly v\xE0 ch\u1EDD d\xE1n n\u1EAFp.");
+      return say("Ch\u01B0a th\u1EC3 giao: h\xE3y ho\xE0n th\xE0nh ly v\xE0 d\xE1n n\u1EAFp.");
     const order = s.orders.shift();
     const q = Math.max(
       0,
@@ -2004,7 +2035,7 @@ var url = Deno.env.get("SUPABASE_URL");
 var serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
 var allowedOrigin = Deno.env.get("APP_ORIGIN") || "http://localhost:5173";
 var headers = { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json", Vary: "Origin" };
-var types = /* @__PURE__ */ new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion", "repairMachine", "recoverTheft", "dismissIncident"]);
+var types = /* @__PURE__ */ new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion", "repairMachine", "advanceRepair", "useBackup", "recoverTheft", "dismissIncident"]);
 var respond = (data, status = 200) => new Response(JSON.stringify(data), { status, headers });
 async function admin(path, init = {}) {
   return fetch(`${url}/rest/v1/${path}`, { ...init, headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", ...init.headers } });
@@ -2045,7 +2076,8 @@ Deno.serve(async (request) => {
     if (current && action) {
       const elapsed = Math.max(0, Math.min(1, (Date.now() - Date.parse(current.updated_at)) / 1e3));
       const safeAction = { ...action };
-      if (action.type === "pour" || action.type === "tick") safeAction.dt = elapsed;
+      if (action.type === "tick") safeAction.dt = elapsed;
+      if (action.type === "pour") safeAction.dt = Math.min(elapsed, Math.max(0, Number(action.dt) || 0));
       if (action.type !== "tick") state = reduce(state, { type: "tick", dt: elapsed });
       state = reduce(state, safeAction);
     }

@@ -13,6 +13,7 @@ export interface QA {
   reset: (seed: number) => void;
   act: (a: Action) => void;
   inspect: () => State;
+  replace: (state: State) => void;
   setIncidents: (patch: Partial<NonNullable<State["incidents"]>>) => void;
   brew: (wrong?: boolean) => void;
   simulateDays: (
@@ -32,6 +33,10 @@ window.mayQA = {
     invariant(useGame.getState().game);
   },
   inspect: () => structuredClone(useGame.getState().game),
+  replace: (state) => {
+    if (!validate(state)) throw Error("Invalid game fixture");
+    useGame.getState().replace(state);
+  },
   setIncidents: (patch) => {
     const s = structuredClone(useGame.getState().game);
     s.incidents = { ...s.incidents!, ...patch };

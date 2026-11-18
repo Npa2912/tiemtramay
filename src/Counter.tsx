@@ -1,7 +1,8 @@
 import { useEffect, useRef } from "react";
 import { useGame } from "./store";
 import { teas } from "./catalog";
-import type { State } from "./engine";
+import { quantity, type State } from "./engine";
+import { productionBlocked } from "./incidents";
 
 const width = 420;
 const height = 370;
@@ -150,6 +151,7 @@ export function Counter() {
     let lastTime: number | undefined;
     let lastDecor = "";
     let lastTop: string | null = null;
+    let visibleFill = 0;
     let dots: { x: number; y: number; v: number }[] = [];
     const {
       fill,
@@ -171,14 +173,16 @@ export function Counter() {
     function draw(time: number) {
       frame = undefined;
       if (!ctx || !background) return;
-      const s = useGame.getState().game;
+      const { game: s, pourInput } = useGame.getState();
       const c = s.cup;
       const decor = s.decor;
       const reducedMotion = motion.matches || s.progression?.reducedMotion;
       const motionTime = reducedMotion ? 0 : time;
       const staff = s.upgrades.staff;
       const sealing = !!c && c.sealLeft > 0;
-      const pouring = isPouring(s);
+      const pouring = !!c && !!pourInput && (!c.tea || c.tea === pourInput) &&
+        !s.paused && !productionBlocked(s) && !c.sealed && !sealing && c.fill < 1.1 &&
+        quantity(s, pourInput) > 0 && (pourInput !== "milk" || quantity(s, "milkPowder") > 0);
       const delta = lastTime === undefined ? 16 : Math.min(33, time - lastTime);
       lastTime = time;
       const decorKey = `${decor.wall}/${decor.shelf}/${decor.lamp}/${decor.plant}/${decor.counter}`;
@@ -208,6 +212,7 @@ export function Counter() {
         stroke(2, 0x795447, 0.35);
         strokeEllipse(206, 294, 93, 19);
         lastTop = null;
+        visibleFill = 0;
         return;
       }
       const w = c.size === "L" ? 77 : 67,
@@ -222,22 +227,24 @@ export function Counter() {
         { x: x + w - 5, y: bottom },
         { x: x + 5, y: bottom },
       ]);
+      // Smooth between game updates while held. On release, draw the final
+      // committed amount and remove the stream together on the next paint.
+      visibleFill = pouring && !reducedMotion
+        ? visibleFill + (c.fill - visibleFill) * Math.min(1, delta / 25)
+        : c.fill;
+      const surface = bottom - Math.min(visibleFill, 1) * h * 0.9;
+      const teaColor = teas.find((t) => t.id === (c.tea ?? pourInput))?.color ?? 0xc99670;
       if (pouring) {
-        stroke(5, teas.find((t) => t.id === c.tea)?.color ?? 0xc99670, 0.85);
-        line(205, 85, 205, bottom - Math.min(c.fill, 1) * h * 0.9);
+        stroke(5, teaColor, 0.85);
+        line(205, 85, 205, surface);
         fill(0xffffff, 0.6);
-        fillCircle(
-          205 + Math.sin(motionTime / 70) * 5,
-          bottom - Math.min(c.fill, 1) * h * 0.9,
-          4,
-        );
+        fillCircle(205 + Math.sin(motionTime / 70) * 5, surface, 4);
       }
-      if (c.tea) {
-        const th = Math.min(1, c.fill) * h * 0.9;
-        fill(teas.find((t) => t.id === c.tea)?.color ?? 0xc99670);
+      if (visibleFill > 0) {
+        fill(teaColor);
         fillPoints([
-          { x: x + 3, y: bottom - th },
-          { x: x + w - 3, y: bottom - th },
+          { x: x + 3, y: Math.min(surface, bottom - 3) },
+          { x: x + w - 3, y: Math.min(surface, bottom - 3) },
           { x: x + w - 7, y: bottom - 3 },
           { x: x + 7, y: bottom - 3 },
         ]);
@@ -260,8 +267,8 @@ export function Counter() {
         if (lastTop !== c.topping) {
           dots = Array.from({ length: 10 }, (_, i) => ({
             x: x + 13 + ((i * 17) % (w - 25)),
-            y: reducedMotion ? bottom - 8 : top - 40 - i * 5,
-            v: 0,
+            y: reducedMotion || i < 4 ? bottom - 8 : top + 6 + i * 3,
+            v: 0.25,
           }));
           lastTop = c.topping;
         }
@@ -275,8 +282,11 @@ export function Counter() {
                 : 0x9a7055,
         );
         for (const d of dots) {
-          d.v += delta * 0.0008;
-          d.y = Math.min(bottom - 8, d.y + d.v * delta);
+          if (reducedMotion) d.y = bottom - 8;
+          else if (!s.paused) {
+            d.v += delta * 0.0014;
+            d.y = Math.min(bottom - 8, d.y + d.v * delta);
+          }
           fillCircle(d.x, d.y, 4);
         }
       }
@@ -339,18 +349,9 @@ export function Counter() {
         schedule();
     }
 
-    function isPouring(s: State) {
-      const c = s.cup;
-      return (
-        !!c?.tea &&
-        !s.paused &&
-        !c.sealed &&
-        c.fill < 1.1 &&
-        s.clock - c.pourAt < 0.18
-      );
-    }
-
-    const unsubscribe = useGame.subscribe(({ game }, { game: previous }) => {
+    const unsubscribe = useGame.subscribe(({ game, pourInput }, previousStore) => {
+      if (pourInput !== previousStore.pourInput) schedule();
+      const previous = previousStore.game;
       if (game === previous) return;
       const c = game.cup;
       const old = previous.cup;
@@ -363,7 +364,7 @@ export function Counter() {
         c?.ice !== old?.ice ||
         c?.sealed !== old?.sealed ||
         !!c?.sealLeft !== !!old?.sealLeft ||
-        isPouring(game) !== isPouring(previous) ||
+        productionBlocked(game) !== productionBlocked(previous) ||
         game.paused !== previous.paused ||
         game.upgrades.staff !== previous.upgrades.staff ||
         game.progression?.reducedMotion !==

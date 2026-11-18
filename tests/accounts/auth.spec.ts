@@ -8,7 +8,7 @@ interface User {
   state: State;
   revision: number;
 }
-function service() {
+function service(options: { startingState?: State; brewingDelayMs?: number } = {}) {
   const users = new Map<string, User>();
   const tokens = new Map<string, User>();
   async function install(context: BrowserContext) {
@@ -36,7 +36,7 @@ function service() {
             email: body.email,
             password: body.password,
             name: body.data.owner_name,
-            state: initial(),
+            state: options.startingState ? structuredClone(options.startingState) : initial(),
             revision: 1,
           };
           users.set(user.email, user);
@@ -70,6 +70,9 @@ function service() {
       }
       if (url.pathname === "/functions/v1/game") {
         if (body.action) {
+          if (options.brewingDelayMs && ["cup", "pour", "top", "seal"].includes(body.action.type)) {
+            await new Promise((resolve) => setTimeout(resolve, options.brewingDelayMs));
+          }
           if (body.revision !== user.revision)
             return reply({ error: "revision_conflict" }, 409);
           user.state = reduce(user.state, body.action);
@@ -140,6 +143,48 @@ test("account contract: same account on two devices loads same progress; another
   await c1.close();
   await c2.close();
   await c3.close();
+});
+test("online controls react before a slow save confirms the brew", async ({ page, context }) => {
+  let startingState = initial(4271);
+  for (const id of ["milk", "black", "milkPowder", "sugar", "ice", "pearl", "cupM", "lid"])
+    startingState = reduce(startingState, { type: "buy", id });
+  startingState = reduce(startingState, { type: "open" });
+  startingState.incidents = {
+    ...startingState.incidents!,
+    machinePlanned: false,
+    powerPlanned: false,
+    theftPlanned: false,
+  };
+  const backend = service({ startingState, brewingDelayMs: 350 });
+  await backend.install(context);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Đăng ký ngay", exact: true }).click();
+  await page.getByLabel("Tên chủ quán").fill("Chủ Tiệm Test");
+  await page.getByLabel("Email").fill("quay@example.test");
+  await page.getByLabel("Mật khẩu", { exact: true }).fill("TiemTraMay123!");
+  await page.getByLabel("Xác nhận mật khẩu", { exact: true }).fill("TiemTraMay123!");
+  await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
+  const cupButton = page.getByRole("button", { name: "Chọn ly M", exact: true });
+  await cupButton.click();
+  expect(await cupButton.isDisabled()).toBe(true);
+  const saved = backend.users.get("quay@example.test")!;
+  expect(saved.state.cup).toBeNull();
+  await page.getByTestId("pour").focus();
+  await page.keyboard.down("Space");
+  await expect.poll(async () => parseInt(await page.getByTestId("fill").innerText()), { intervals: [30] }).toBeGreaterThanOrEqual(82);
+  await page.keyboard.up("Space");
+  const fill = await page.getByTestId("fill").innerText();
+  const pearls = page.locator(".topping").filter({ hasText: "Trân châu" });
+  await pearls.click();
+  expect(await pearls.getAttribute("class")).toContain("chosen");
+  for (const name of ["Nguyên vị", "70%", "Ít đá"])
+    await page.getByRole("button", { name, exact: true }).click();
+  await page.locator(".seal-button").click();
+  expect(await page.locator(".seal-button").innerText()).toContain("Đã dán nắp");
+  expect(saved.state.cup?.sealed).not.toBe(true);
+  await expect.poll(() => saved.state.cup?.sealed).toBe(true);
+  expect(await page.getByTestId("fill").innerText()).toBe(fill);
+  expect(await page.getByRole("button", { name: "Giao cho khách" }).isEnabled()).toBe(true);
 });
 test("account contract: failed cloud load never enters a guest game, and wrong login reports failure", async ({
   page,

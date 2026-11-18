@@ -141,19 +141,39 @@ describe("real production incidents", () => {
     expect(reduce(s, { type: "repairMachine" }).money).toBe(s.money);
     expect(pour(s).cup!.fill).toBeGreaterThan(0);
   });
-  it("25k backup resumes production permanently; insufficient funds never partially charged", () => {
-    let s = pour(brewing({ machinePlanned: true }));
-    const before = s.money;
-    s = reduce(s, { type: "security", id: "backup" });
-    expect(s.money).toBe(before - 25000);
-    expect(s.incidents?.machineBroken).toBe(false);
-    expect(securityActive(s, "backup")).toBe(true);
+  it("an upgraded sealer can prevent a planned breakdown", () => {
+    const s = brewing({ machinePlanned: true });
+    while (dailyRoll(s.seed, s.day, 404) >= 0.1) s.seed++;
+    expect(pour(s).incidents?.machineBroken).toBe(true);
+    s.upgrades.sealer = 1;
+    const maintained = pour(s);
+    expect(maintained.incidents?.machineBroken).toBe(false);
+    expect(maintained.cup!.fill).toBeGreaterThan(0);
+  });
+  it("uses only an owned backup during a breakdown", () => {
+    const broken = pour(brewing({ machinePlanned: true }));
+    expect(reduce(broken, { type: "security", id: "backup" })).toBe(broken);
+    expect(reduce(broken, { type: "useBackup" })).toBe(broken);
+    const owned = pour(reduce(brewing({ machinePlanned: true }), { type: "security", id: "backup" }));
+    expect(securityActive(owned, "backup")).toBe(true);
+    expect(owned.incidents?.machineBroken).toBe(true);
+    const recovered = reduce(owned, { type: "useBackup" });
+    expect(recovered.money).toBe(owned.money);
+    expect(recovered.incidents?.machineBroken).toBe(false);
+  });
+  it("advances only the shortfall, repairs once and keeps the open shift", () => {
     const poor = pour(brewing({ machinePlanned: true }));
     poor.money = 100;
     expect(reduce(poor, { type: "repairMachine" }).money).toBe(100);
-    expect(
-      reduce(poor, { type: "security", id: "backup" }).incidents?.machineBroken,
-    ).toBe(true);
+    const repaired = reduce(poor, { type: "advanceRepair" });
+    expect(repaired.money).toBe(0);
+    expect(repaired.debt).toBe(poor.debt + 49900);
+    expect(repaired.phase).toBe("open");
+    expect(repaired.cup).toEqual(poor.cup);
+    expect(repaired.orders).toEqual(poor.orders);
+    expect(repaired.incidents?.machineBroken).toBe(false);
+    expect(reduce(repaired, { type: "advanceRepair" })).toBe(repaired);
+    expect(pour(repaired).cup!.fill).toBeGreaterThan(0);
   });
   it("new security losses and repair expenses reconcile at settlement", () => {
     let s = pour(brewing({ theftPlanned: true }));

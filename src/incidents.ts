@@ -21,7 +21,7 @@ export interface Incidents {
   notice: string;
 }
 export type IncidentAction = {
-  type: "repairMachine" | "recoverTheft" | "dismissIncident";
+  type: "repairMachine" | "advanceRepair" | "useBackup" | "recoverTheft" | "dismissIncident";
 };
 export function dailyRoll(seed: number, day: number, salt: number) {
   let x = (seed ^ Math.imul(day, 0x9e3779b9) ^ salt) >>> 0;
@@ -102,6 +102,14 @@ export function securityActive(s: State, id: string) {
   if (id !== "lock" && id !== "camera") return true;
   const expiry = s.incidents?.expires[id];
   return expiry === undefined || expiry >= s.day;
+}
+function preventsMachineBreakdown(s: State) {
+  const barista = s.progression?.staff.barista;
+  const maintenance =
+    0.1 * (s.upgrades.sealer ?? 0) +
+    0.1 * (s.upgrades.staff ?? 0) +
+    (barista?.active ? 0.05 * barista.level : 0);
+  return maintenance > 0 && dailyRoll(s.seed, s.day, 404) < maintenance;
 }
 export function equipmentLabel(s: State, id: string) {
   if (!securityActive(s, id)) return "Chưa có / đã hết hạn";
@@ -199,16 +207,35 @@ export function interceptIncident(input: State, a: Action): State | null {
     }
     return s;
   }
-  if (a.type === "repairMachine") {
+  if (a.type === "security" && a.id === "backup" && i.machineBroken) {
+    return source;
+  }
+  if (a.type === "repairMachine" || a.type === "advanceRepair" || a.type === "useBackup") {
+    if (!i.machineBroken) return source;
     const s = structuredClone(source);
-    if (!s.incidents.machineBroken) return s;
-    if (s.money < 50000) {
-      s.message = "Cần 50.000đ để sửa máy, hoặc mua máy dự phòng 25.000đ.";
-      return s;
+    if (a.type === "useBackup") {
+      if (!securityActive(s, "backup")) return source;
+    } else {
+      const shortfall = Math.max(0, Math.ceil(50000 - s.money));
+      if (a.type === "advanceRepair") {
+        if (!shortfall) return source;
+        s.money += shortfall;
+        s.debt += shortfall;
+        s.ledger = [...s.ledger, {
+          day: s.day, kind: "Ứng tiền sửa máy (không lãi)", amount: shortfall,
+        }].slice(-600);
+      } else if (shortfall) {
+        s.message = "Cần 50.000đ để sửa máy. Có thể ứng phần còn thiếu.";
+        return s;
+      }
+      expense(s, "Sửa máy dán nắp", 50000);
     }
-    expense(s, "Sửa máy dán nắp", 50000);
     s.incidents.machineBroken = false;
-    s.incidents.notice = "Máy đã được sửa. Tiếp tục pha ly đang làm nhé!";
+    if (s.phase === "open") s.paused = false;
+    s.incidents.notice = a.type === "useBackup"
+      ? "Máy dự phòng đã tiếp quản. Tiếp tục pha ly đang làm nhé!"
+      : "Máy đã được sửa. Tiếp tục pha ly đang làm nhé!";
+    s.message = s.incidents.notice;
     return s;
   }
   if (
@@ -251,7 +278,7 @@ export function interceptIncident(input: State, a: Action): State | null {
     if (
       !i.machineChecked &&
       i.machinePlanned &&
-      !securityActive(source, "backup")
+      !preventsMachineBreakdown(source)
     ) {
       const s = structuredClone(source);
       s.incidents.machineChecked = true;
@@ -259,7 +286,7 @@ export function interceptIncident(input: State, a: Action): State | null {
       history(
         s,
         "machine",
-        "Máy dán nắp bị hỏng! Sửa 50.000đ hoặc mua máy dự phòng 25.000đ.",
+        "Máy dán nắp bị hỏng! Sửa 50.000đ hoặc dùng máy dự phòng đã có.",
       );
       s.incidents.notice = s.message;
       return s;
@@ -346,13 +373,13 @@ export function afterIncidents(previous: State, next: State, a: Action): State {
     if (!current.machineChecked) {
       current.machineChecked = true;
       if (current.machinePlanned) {
-        current.machineBroken = !securityActive(s, "backup");
+        current.machineBroken = !preventsMachineBreakdown(s);
         history(
           s,
           "machine",
           current.machineBroken
-            ? "Máy hỏng! Sửa 50.000đ hoặc máy dự phòng 25.000đ."
-            : "Máy chính hỏng; máy dự phòng đã tiếp quản.",
+            ? "Máy hỏng! Sửa 50.000đ hoặc dùng máy dự phòng đã có."
+            : "Máy được bảo trì kịp thời, quầy tiếp tục hoạt động.",
         );
         current.notice = s.message;
       }

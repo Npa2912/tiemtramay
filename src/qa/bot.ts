@@ -15,6 +15,7 @@ import {
   flavors,
   unlocked,
 } from "../catalog";
+import { securityActive } from "../incidents";
 export class Bot {
   state: State;
   constructor(seed = 4271) {
@@ -46,8 +47,12 @@ export class Bot {
   resolveIncidents() {
     if (this.state.incidents?.powerLeft)
       for (let i = 0; i < 60; i++) this.act({ type: "tick", dt: 1 });
-    if (this.state.incidents?.machineBroken)
-      this.act({ type: "security", id: "backup" });
+    if (this.state.incidents?.machineBroken) {
+      const type = securityActive(this.state, "backup")
+        ? "useBackup"
+        : this.state.money >= 50000 ? "repairMachine" : "advanceRepair";
+      this.act({ type });
+    }
     return this;
   }
   brew(wrong = false) {

@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useShallow } from "zustand/react/shallow";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { Counter } from "./Counter";
 import { BrewOptions } from "./BrewOptions";
 import { ProgressionPanel } from "./ProgressionPanel";
@@ -43,8 +44,7 @@ type Panel =
   | "account"
   | "brew"
   | null;
-function Icon({ name }: { name: string }) {
-  const paths: Record<string, ReactNode> = {
+const iconPaths: Record<string, ReactNode> = {
     cup: (
       <>
         <path d="M6 7h12l-2 14H8Z M5 4h14 M14 4l3-3" />
@@ -81,7 +81,8 @@ function Icon({ name }: { name: string }) {
     report: <path d="M4 21V4h16v17ZM8 9h8M8 13h8M8 17h5" />,
     close: <path d="m6 6 12 12M6 18 18 6" />,
     star: <path d="m12 2 3 6 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1Z" />,
-  };
+};
+const Icon = memo(function Icon({ name }: { name: string }) {
   return (
     <svg
       viewBox="0 0 24 24"
@@ -92,10 +93,10 @@ function Icon({ name }: { name: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
     >
-      {paths[name] ?? paths.cup}
+      {iconPaths[name] ?? iconPaths.cup}
     </svg>
   );
-}
+});
 function cupCanPour(game: State) {
   const c = game.cup;
   return (
@@ -110,7 +111,9 @@ function cupCanPour(game: State) {
 }
 
 export default function App() {
-  const { game: s, act, ready, error, online } = useGame();
+  const { game: s, act, ready, error, online } = useGame(
+    useShallow(({ game, act, ready, error, online }) => ({ game, act, ready, error, online })),
+  );
   const [panel, setPanel] = useState<Panel>(
       location.hash.includes("access_token") ? "account" : null,
     ),
@@ -157,22 +160,25 @@ export default function App() {
     let frame: number;
     function loop(now: number) {
       if (now - last.current >= 70) {
-        useGame
-          .getState()
-          .act({ type: "tick", dt: (now - last.current) / 1000 });
+        const { online, act } = useGame.getState();
+        if (!online.active || pourSince.current === null)
+          act({ type: "tick", dt: (now - last.current) / 1000 });
         last.current = now;
       }
       const began = pourSince.current;
       if (began !== null) {
-        const { game, online, act } = useGame.getState();
-        const canPour = cupCanPour(game);
-        setPouring(canPour && game.sound);
+        const { game, act, online } = useGame.getState();
+        const canPour = online.status !== "error" && cupCanPour(game);
+        if (!canPour) {
+          pourSince.current = null;
+          useGame.setState({ pourInput: null });
+          setPouring(false);
+        }
         // The local reducer runs at most 30 times per second while held.
         const elapsed = now - began;
-        if (elapsed > 0 && (online.active || elapsed >= 1000 / 30)) {
+        if (canPour && elapsed >= 1000 / 30) {
           pourSince.current = now;
-          if (canPour)
-            act({ type: "pour", tea, dt: Math.min(0.15, elapsed / 1000) });
+          act({ type: "pour", tea, dt: Math.min(0.15, elapsed / 1000) });
         }
       }
       frame = requestAnimationFrame(loop);
@@ -186,6 +192,7 @@ export default function App() {
   useEffect(() => {
     function stop() {
       pourSince.current = null;
+      if (useGame.getState().pourInput !== null) useGame.setState({ pourInput: null });
       setPouring(false);
     }
     function hidden() {
@@ -194,25 +201,31 @@ export default function App() {
         useGame.getState().act({ type: "pause" });
       void flushSave().catch(() => {});
     }
-    window.addEventListener("pointerup", stop);
     window.addEventListener("blur", stop);
     document.addEventListener("visibilitychange", hidden);
     window.addEventListener("pagehide", hidden);
     return () => {
-      window.removeEventListener("pointerup", stop);
       window.removeEventListener("blur", stop);
       document.removeEventListener("visibilitychange", hidden);
       window.removeEventListener("pagehide", hidden);
     };
   }, []);
+  function startPour() {
+    const { game, online } = useGame.getState();
+    if (pourSince.current !== null || online.status === "error" || !cupCanPour(game)) return;
+    pourSince.current = performance.now();
+    useGame.setState({ pourInput: tea });
+    setPouring(game.sound);
+  }
   function stopPour(commit: boolean) {
     const began = pourSince.current;
     pourSince.current = null;
+    if (useGame.getState().pourInput !== null) useGame.setState({ pourInput: null });
     setPouring(false);
     if (began === null || !commit) return;
-    const { game, online, act } = useGame.getState();
+    const { game, act } = useGame.getState();
     const dt = Math.min(0.15, (performance.now() - began) / 1000);
-    if (!online.active && dt > 0 && cupCanPour(game))
+    if (dt > 0 && cupCanPour(game))
       act({ type: "pour", tea, dt });
   }
   function openPanel(p: Panel) {
@@ -291,6 +304,9 @@ export default function App() {
                   >
                     Dùng máy phát · 60.000đ
                   </button>
+                  <button onClick={() => act({ type: "close" })}>
+                    Kết sổ hôm nay
+                  </button>
                 </>
               ) : (
                 <>
@@ -301,12 +317,16 @@ export default function App() {
                   >
                     Sửa máy · 50.000đ
                   </button>
-                  <button
-                    disabled={s.money < 25000}
-                    onClick={() => act({ type: "security", id: "backup" })}
-                  >
-                    Máy dự phòng · 25.000đ
-                  </button>
+                  {securityActive(s, "backup") && (
+                    <button onClick={() => act({ type: "useBackup" })}>
+                      Dùng máy dự phòng
+                    </button>
+                  )}
+                  {s.money < 50000 && (
+                    <button onClick={() => act({ type: "advanceRepair" })}>
+                      Ứng {money(Math.ceil(50000 - s.money))} & sửa máy
+                    </button>
+                  )}
                 </>
               )}
               {s.paused && (
@@ -314,9 +334,6 @@ export default function App() {
                   Tiếp tục đếm giờ
                 </button>
               )}
-              <button onClick={() => act({ type: "close" })}>
-                Kết sổ hôm nay
-              </button>
             </div>
           </div>
         )}
@@ -606,17 +623,21 @@ export default function App() {
                 s.paused
               }
               onPointerDown={(e) => {
+                if (!e.isPrimary || e.button !== 0) return;
                 e.currentTarget.setPointerCapture(e.pointerId);
-                pourSince.current ??= performance.now();
-                if (s.sound) effect("pour");
+                startPour();
               }}
-              onPointerUp={() => stopPour(true)}
-              onPointerCancel={() => stopPour(false)}
+              onPointerUp={(e) => {
+                if (e.isPrimary) stopPour(true);
+              }}
+              onPointerCancel={(e) => {
+                if (e.isPrimary) stopPour(false);
+              }}
               onLostPointerCapture={() => stopPour(false)}
               onKeyDown={(e) => {
                 if (e.code === "Space" || e.code === "Enter") {
                   e.preventDefault();
-                  pourSince.current ??= performance.now();
+                  startPour();
                 }
               }}
               onKeyUp={(e) => {
@@ -633,7 +654,10 @@ export default function App() {
             <button
               className="seal-button"
               disabled={!c || c.sealed || c.sealLeft > 0 || s.paused}
-              onClick={() => send({ type: "seal" })}
+              onClick={() => {
+                stopPour(true);
+                send({ type: "seal" });
+              }}
             >
               {c?.sealed ? "Đã dán nắp" : c?.sealLeft ? "Đang dán…" : "Dán nắp"}
               <small>{s.upgrades.staff ? "Có bạn hỗ trợ" : "máy Mây 01"}</small>

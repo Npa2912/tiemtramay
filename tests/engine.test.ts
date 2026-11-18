@@ -49,7 +49,7 @@ describe("catalog and economy", () => {
     expect(quantity(b.state, "ice")).toBe(0);
     expect(b.state.stats.waste).toBeGreaterThan(0);
   });
-  it("upgrade changes actual sealing speed and costs money", () => {
+  it("records sealer upgrades and their cost", () => {
     const b = new Bot().stock();
     const before = b.state.money;
     b.act({ type: "upgrade", id: "sealer" });
@@ -240,7 +240,7 @@ describe("progression, staff, recovery and adversarial inputs", () => {
     b.act({ type: "pour", tea: "matcha", dt: 1 });
     expect(b.state.cup?.tea).toBeNull();
   });
-  it("staff costs daily wages and makes sealing faster", () => {
+  it("staff costs daily wages and sealing is immediate", () => {
     const b = new Bot();
     b.state.day = 5;
     b.state.stats.day = 5;
@@ -253,7 +253,8 @@ describe("progression, staff, recovery and adversarial inputs", () => {
       .act({ type: "sugar", value: r.sugar })
       .act({ type: "ice", value: r.ice })
       .act({ type: "seal" });
-    expect(b.state.cup?.sealLeft).toBeCloseTo(1.1);
+    expect(b.state.cup?.sealed).toBe(true);
+    expect(b.state.cup?.sealLeft).toBe(0);
     b.act({ type: "close" });
     expect(b.state.stats.expenses).toBe(16000);
   });

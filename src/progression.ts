@@ -168,7 +168,7 @@ export const staffCatalog = [
     day: 5,
     cost: 45000,
     wage: 4000,
-    desc: "Giảm thời gian dán nắp 0,15 giây/cấp.",
+    desc: "Ngăn thêm 5% sự cố máy dán nắp mỗi cấp.",
   },
   {
     id: "cashier",
@@ -497,7 +497,7 @@ export const events: GameEvent[] = [
         id: "manual",
         label: "Vệ sinh thủ công",
         description:
-          "Quầy tạm dừng tới khi sửa 50.000đ hoặc mua máy dự phòng 25.000đ.",
+          "Quầy tạm dừng tới khi sửa máy hoặc chuyển sang máy dự phòng đã có.",
       },
     ],
   },
@@ -783,16 +783,6 @@ export function applyProgression(
     JSON.stringify(s.decor) !== JSON.stringify(previous.decor)
   )
     p.metrics.decorations++;
-  if (
-    action.type === "seal" &&
-    s.cup &&
-    previous.cup &&
-    s.cup.sealLeft > previous.cup.sealLeft
-  )
-    s.cup.sealLeft = Math.max(
-      0.25,
-      s.cup.sealLeft - 0.15 * level(p, "barista") - p.boosts.seal,
-    );
   const oldIds = new Set(previous.orders.map((o) => o.id));
   for (const o of s.orders)
     if (!oldIds.has(o.id)) {

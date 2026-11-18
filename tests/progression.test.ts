@@ -136,7 +136,7 @@ describe("progression and event engine", () => {
       s.money,
     );
   });
-  it("applies staff sealing speed and charges wages on summary transition only", () => {
+  it("seals immediately and charges wages on summary transition only", () => {
     const s = prepared();
     s.phase = "open";
     s.progression.staff.barista = { level: 2, active: true };
@@ -155,7 +155,8 @@ describe("progression and event engine", () => {
     };
     s.stock.lid = [{ qty: 10, expires: 999 }];
     const sealed = reduce(s, { type: "seal" });
-    expect(sealed.cup?.sealLeft).toBeCloseTo(1.3);
+    expect(sealed.cup?.sealed).toBe(true);
+    expect(sealed.cup?.sealLeft).toBe(0);
     const summary = reduce(sealed, { type: "close" });
     expect(summary.money).toBe(988000);
     expect(summary.stats.expenses).toBe(12000);

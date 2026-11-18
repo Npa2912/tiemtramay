@@ -75,7 +75,7 @@ describe("liquid and sealer sound effects", () => {
     expect(events.filter((e) => e.kind === "tone")).toHaveLength(0);
     expect(
       events.filter((e) => e.kind === "startNoise").map((e) => e.time),
-    ).toEqual([0, 0.16, 0.32, 0.48]);
+    ).toEqual([0, 0.04, 0.08, 0.12]);
   });
   it("muting cancels pouring and suppresses later sound effects", async () => {
     const audio = await import("../src/audio");

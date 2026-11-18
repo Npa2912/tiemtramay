@@ -326,10 +326,50 @@ const progressionActions = new Set([
   "ownerName",
   "reducedMotion",
 ]);
+function pourTea(s: State, a: Extract<Action, { type: "pour" }>) {
+  const c = s.cup!;
+  const say = (message: string) => ({ ...s, message });
+  if (
+    !teas.some((t) => t.id === a.tea) ||
+    !unlocked(s, a.tea) ||
+    !Number.isFinite(a.dt)
+  )
+    return s;
+  if (c.sealed || c.sealLeft > 0 || c.fill >= 1.1) return s;
+  if (c.tea && c.tea !== a.tea)
+    return say("Không trộn hai loại trà trong cùng ly.");
+  const amount = Math.min(Math.max(0, a.dt) * 0.32, 1.1 - c.fill);
+  const qty = amount * (c.size === "L" ? 1.5 : 1);
+  if (
+    quantity(s, a.tea) < qty ||
+    (a.tea === "milk" && quantity(s, "milkPowder") < qty * 0.3)
+  )
+    return say("Đã hết nguyên liệu của bình này.");
+  const next = {
+    ...s,
+    cup: { ...c },
+    stats: { ...s.stats },
+    stock: { ...s.stock, [a.tea]: s.stock[a.tea]?.map((lot) => ({ ...lot })) ?? [] },
+  };
+  if (a.tea === "milk") next.stock.milkPowder = s.stock.milkPowder?.map((lot) => ({ ...lot })) ?? [];
+  if (!consume(next, a.tea, qty)) return s;
+  if (a.tea === "milk") consume(next, "milkPowder", qty * 0.3);
+  next.cup.tea = a.tea;
+  next.cup.fill += amount;
+  next.cup.pourAt = s.clock;
+  return next;
+}
 export function reduce(input: State, a: Action): State {
   const prepared = ensureIncidents(input);
   const intercepted = interceptIncident(prepared, a);
   if (intercepted) return intercepted;
+  if (a.type === "pour" && prepared.progression &&
+      prepared.incidents.day === prepared.day && prepared.incidents.theftChecked &&
+      prepared.incidents.machineChecked && prepared.incidents.powerChecked) {
+    if (prepared.phase !== "open" || prepared.paused) return prepared;
+    if (!prepared.cup) return { ...prepared, message: "Chọn một chiếc ly trước nhé." };
+    return pourTea(prepared, a);
+  }
   const next = progressionActions.has(a.type)
     ? reduceProgression(prepared, a as ProgressionAction)
     : applyProgression(prepared, reduceCore(prepared, a), a);
@@ -442,7 +482,7 @@ function reduceCore(input: State, a: Action): State {
       s.stock[id] = s.stock[id].filter((l) => l.expires > s.day);
     }
     if (s.debt && s.money > 120000) {
-      const repaid = Math.min(s.debt, s.money - 100000);
+      const repaid = Math.min(s.debt, Math.floor(s.money - 100000));
       s.debt -= repaid;
       log(s, "Hoàn vốn vay", -repaid);
     }
@@ -509,30 +549,7 @@ function reduceCore(input: State, a: Action): State {
   if (c.sealed || c.sealLeft > 0) {
     if (a.type !== "serve") return say("Ly đang dán hoặc đã có nắp.");
   }
-  if (a.type === "pour") {
-    if (
-      !teas.some((t) => t.id === a.tea) ||
-      !unlocked(s, a.tea) ||
-      !Number.isFinite(a.dt)
-    )
-      return s;
-    if (c.sealed || c.sealLeft > 0 || c.fill >= 1.1) return s;
-    if (c.tea && c.tea !== a.tea)
-      return say("Không trộn hai loại trà trong cùng ly.");
-    const amount = Math.min(Math.max(0, a.dt) * 0.32, 1.1 - c.fill);
-    const qty = amount * (c.size === "L" ? 1.5 : 1);
-    if (
-      quantity(s, a.tea) < qty ||
-      (a.tea === "milk" && quantity(s, "milkPowder") < qty * 0.3)
-    )
-      return say("Đã hết nguyên liệu của bình này.");
-    if (!consume(s, a.tea, qty)) return s;
-    if (a.tea === "milk") consume(s, "milkPowder", qty * 0.3);
-    c.tea = a.tea;
-    c.fill += amount;
-    c.pourAt = s.clock;
-    return s;
-  }
+  if (a.type === "pour") return pourTea(s, a);
   if (a.type === "top") {
     if (!toppings.some((t) => t.id === a.id) || !unlocked(s, a.id)) return s;
     if (c.topping) return say("Ly đã có topping.");
@@ -574,15 +591,12 @@ function reduceCore(input: State, a: Action): State {
     )
       return say("Cần đủ trà (≥60%), topping, hương vị, đường và đá.");
     if (!consume(s, "lid", 1)) return say("Hết nắp!");
-    c.sealLeft = Math.max(
-      0.25,
-      1.6 - 0.35 * (s.upgrades.sealer ?? 0) - 0.5 * (s.upgrades.staff ?? 0),
-    );
-    return say("Máy đang dán nắp…");
+    c.sealed = true;
+    return say("Đã dán nắp. Ly sẵn sàng giao khách!");
   }
   if (a.type === "serve") {
     if (!complete(c) || !s.orders.length)
-      return say("Chưa thể giao: hoàn thành ly và chờ dán nắp.");
+      return say("Chưa thể giao: hãy hoàn thành ly và dán nắp.");
     const order = s.orders.shift()!;
     const q = Math.max(
       0,

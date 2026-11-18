@@ -1,6 +1,8 @@
 let ctx: AudioContext | undefined;
 let music: ReturnType<typeof setInterval> | undefined;
 let pouring: ReturnType<typeof setInterval> | undefined;
+let pourVolume: GainNode | undefined;
+const noiseBuffers = new Map<number, AudioBuffer>();
 let note = 0;
 let enabled = true;
 function context() {
@@ -16,18 +18,18 @@ function context() {
   return ctx;
 }
 function noise(c: AudioContext, seconds: number) {
-  const buffer = c.createBuffer(
-    1,
-    Math.ceil(c.sampleRate * seconds),
-    c.sampleRate,
-  );
-  const data = buffer.getChannelData(0);
-  for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+  let buffer = noiseBuffers.get(seconds);
+  if (!buffer) {
+    buffer = c.createBuffer(1, Math.ceil(c.sampleRate * seconds), c.sampleRate);
+    const data = buffer.getChannelData(0);
+    for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+    noiseBuffers.set(seconds, buffer);
+  }
   const source = c.createBufferSource();
   source.buffer = buffer;
   return source;
 }
-function bubble(c: AudioContext, time: number) {
+function bubble(c: AudioContext, time: number, destination: AudioNode = c.destination) {
   const o = c.createOscillator(),
     g = c.createGain();
   o.type = "sine";
@@ -39,7 +41,7 @@ function bubble(c: AudioContext, time: number) {
   g.gain.exponentialRampToValueAtTime(0.065, time + 0.015);
   g.gain.exponentialRampToValueAtTime(0.001, time + 0.17);
   o.connect(g);
-  g.connect(c.destination);
+  g.connect(destination);
   o.start(time);
   o.stop(time + 0.18);
   const water = noise(c, 0.2),
@@ -52,7 +54,7 @@ function bubble(c: AudioContext, time: number) {
   volume.gain.exponentialRampToValueAtTime(0.001, time + 0.2);
   water.connect(filter);
   filter.connect(volume);
-  volume.connect(c.destination);
+  volume.connect(destination);
   water.start(time);
   water.stop(time + 0.2);
 }
@@ -60,20 +62,29 @@ export function setPouring(on: boolean) {
   if (!on || !enabled) {
     if (pouring) clearInterval(pouring);
     pouring = undefined;
+    if (pourVolume && ctx) {
+      const time = ctx.currentTime;
+      pourVolume.gain.setValueAtTime(1, time);
+      pourVolume.gain.linearRampToValueAtTime(0, time + 0.008);
+      pourVolume = undefined;
+    }
     return;
   }
   if (pouring) return;
   const c = context();
   if (!c) return;
-  bubble(c, c.currentTime);
+  const volume = c.createGain();
+  volume.connect(c.destination);
+  pourVolume = volume;
+  bubble(c, c.currentTime, volume);
   pouring = setInterval(() => {
-    if (c.state === "running") bubble(c, c.currentTime);
+    if (c.state === "running") bubble(c, c.currentTime, volume);
   }, 115);
 }
 function seal(c: AudioContext) {
   for (let i = 0; i < 4; i++) {
-    const time = c.currentTime + i * 0.16,
-      source = noise(c, 0.14),
+    const time = c.currentTime + i * 0.04,
+      source = noise(c, 0.04),
       filter = c.createBiquadFilter(),
       gain = c.createGain();
     filter.type = "bandpass";
@@ -81,16 +92,16 @@ function seal(c: AudioContext) {
     filter.frequency.setValueAtTime(i % 2 ? 1600 : 900, time);
     filter.frequency.exponentialRampToValueAtTime(
       i % 2 ? 600 : 2300,
-      time + 0.12,
+      time + 0.03,
     );
     gain.gain.setValueAtTime(0.001, time);
-    gain.gain.linearRampToValueAtTime(0.07, time + 0.018);
-    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.14);
+    gain.gain.linearRampToValueAtTime(0.07, time + 0.005);
+    gain.gain.exponentialRampToValueAtTime(0.001, time + 0.04);
     source.connect(filter);
     filter.connect(gain);
     gain.connect(c.destination);
     source.start(time);
-    source.stop(time + 0.14);
+    source.stop(time + 0.04);
   }
 }
 export function effect(kind = "click") {

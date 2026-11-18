@@ -83,7 +83,7 @@ export const upgrades = [
   {
     id: "sealer",
     name: "Máy dán nắp",
-    desc: "Mỗi cấp giảm 0,35 giây",
+    desc: "Mỗi cấp ngăn 10% sự cố máy dán nắp",
     price: 18000,
     day: 1,
     max: 3,
@@ -115,7 +115,7 @@ export const upgrades = [
   {
     id: "staff",
     name: "Bạn đồng hành",
-    desc: "Hỗ trợ máy nắp, lương 8.000đ/ngày",
+    desc: "Ngăn 10% sự cố máy nắp, lương 8.000đ/ngày",
     price: 30000,
     day: 5,
     max: 1,

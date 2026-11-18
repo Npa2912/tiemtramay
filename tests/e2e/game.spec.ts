@@ -54,8 +54,14 @@ async function brew(page: Page) {
   await nozzle.scrollIntoViewIfNeeded();
   const box = (await nozzle.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  // Inspect a pixel crossed by the stream, above the cup and below the nozzle.
+  const streamPixel = () => page.locator("canvas").evaluate((canvas: HTMLCanvasElement) =>
+    Array.from(canvas.getContext("2d")!.getImageData(210, 40, 1, 1).data),
+  );
+  const idlePixel = await streamPixel();
   const began = Date.now();
   await page.mouse.down();
+  await expect.poll(streamPixel, { intervals: [16], timeout: 500 }).not.toEqual(idlePixel);
   await expect
     .poll(async () => parseInt(await page.getByTestId("fill").innerText()), {
       intervals: [35],
@@ -63,13 +69,18 @@ async function brew(page: Page) {
     })
     .toBeGreaterThanOrEqual(83);
   await page.mouse.up();
+  // By the first paint after the release event, the stream must be gone.
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  expect(await streamPixel()).toEqual(idlePixel);
   expect(Date.now() - began).toBeGreaterThan(2000);
   const fill = await page.getByTestId("fill").innerText();
   expect(parseInt(fill)).toBeGreaterThanOrEqual(77);
   expect(parseInt(fill)).toBeLessThanOrEqual(94);
   await page.waitForTimeout(200);
   expect(await page.getByTestId("fill").innerText()).toBe(fill);
-  await page.locator(".topping").filter({ hasText: "Trân châu" }).click();
+  const pearls = page.locator(".topping").filter({ hasText: "Trân châu" });
+  await pearls.click();
+  expect(await pearls.getAttribute("class")).toContain("chosen");
   await page.getByRole("button", { name: "Nguyên vị", exact: true }).click();
   await page.getByRole("button", { name: "70%", exact: true }).click();
   await page.getByRole("button", { name: "Ít đá", exact: true }).click();
@@ -77,9 +88,8 @@ async function brew(page: Page) {
     page.getByRole("button", { name: "Giao cho khách" }),
   ).toBeDisabled();
   await page.locator(".seal-button").click();
-  await expect(
-    page.getByRole("button", { name: "Giao cho khách" }),
-  ).toBeEnabled();
+  expect(await page.locator(".seal-button").innerText()).toContain("Đã dán nắp");
+  expect(await page.getByRole("button", { name: "Giao cho khách" }).isEnabled()).toBe(true);
   await page.screenshot({
     path: "screenshots/drink-sealed.png",
     fullPage: true,

@@ -80,10 +80,18 @@ try {
     " · ",
   )[0];
   await page.getByRole("button", { name: `Chọn ${tea}`, exact: true }).click();
-  await page.getByTestId("pour").focus();
-  await page.keyboard.down("Space");
-  await page.waitForTimeout(2650);
-  await page.keyboard.up("Space");
+  async function pour() {
+    await page.getByTestId("pour").focus();
+    await page.keyboard.down("Space");
+    await page.waitForTimeout(2650);
+    await page.keyboard.up("Space");
+  }
+  await pour();
+  const backup = page.getByRole("button", { name: "Dùng máy dự phòng", exact: true });
+  if (await backup.isVisible()) {
+    await backup.click();
+    await pour();
+  }
   const fill = parseInt(await page.getByTestId("fill").innerText());
   if (fill < 77 || fill > 94) throw Error(`Pour ${fill}%`);
   await page.locator(".topping").filter({ hasText: "Trân châu" }).click();

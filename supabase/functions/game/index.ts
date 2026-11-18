@@ -7,7 +7,7 @@ const url = Deno.env.get("SUPABASE_URL")!;
 const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const allowedOrigin = Deno.env.get("APP_ORIGIN") || "http://localhost:5173";
 const headers = { "Access-Control-Allow-Origin": allowedOrigin, "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info", "Access-Control-Allow-Methods": "POST, OPTIONS", "Content-Type": "application/json", Vary: "Origin" };
-const types = new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion", "repairMachine", "recoverTheft", "dismissIncident"]);
+const types = new Set(["buy", "upgrade", "decor", "open", "close", "next", "cup", "pour", "top", "flavor", "sugar", "ice", "seal", "serve", "trash", "tick", "pause", "sound", "tutorial", "credit", "selectOrder", "eventChoice", "claimQuest", "hire", "train", "staffAssign", "security", "ownerName", "reducedMotion", "repairMachine", "advanceRepair", "useBackup", "recoverTheft", "dismissIncident"]);
 const respond = (data: unknown, status = 200) => new Response(JSON.stringify(data), { status, headers });
 async function admin(path: string, init: RequestInit = {}) {
   return fetch(`${url}/rest/v1/${path}`, { ...init, headers: { apikey: serviceKey, Authorization: `Bearer ${serviceKey}`, "Content-Type": "application/json", ...init.headers } });
@@ -50,7 +50,8 @@ Deno.serve(async (request) => {
       // time since the previous committed command, bounded to avoid offline leaps.
       const elapsed = Math.max(0, Math.min(1, (Date.now() - Date.parse(current.updated_at)) / 1000));
       const safeAction = { ...action };
-      if (action.type === "pour" || action.type === "tick") safeAction.dt = elapsed;
+      if (action.type === "tick") safeAction.dt = elapsed;
+      if (action.type === "pour") safeAction.dt = Math.min(elapsed, Math.max(0, Number(action.dt) || 0));
       if (action.type !== "tick") state = reduce(state, { type: "tick", dt: elapsed });
       state = reduce(state, safeAction);
     }

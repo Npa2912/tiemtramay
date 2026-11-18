@@ -18,6 +18,7 @@ const localStatus = (): OnlineStatus => ({
 });
 interface Store {
   game: State;
+  pourInput: string | null;
   ready: boolean;
   error: string;
   act: (a: Action) => void;
@@ -28,6 +29,8 @@ interface Store {
   leaveOnline: () => Promise<void>;
 }
 let localSnapshot: State | null = null;
+let confirmedGame: State | null = null;
+let inFlightAction: Action | undefined;
 let generation = 0;
 let queue: Action[] = [];
 let pumpTimer: ReturnType<typeof setTimeout> | undefined;
@@ -39,22 +42,42 @@ let finishedRequests = 0;
 function cancelQueue() {
   generation++;
   queue = [];
+  inFlightAction = undefined;
   if (pumpTimer) clearTimeout(pumpTimer);
   pumpTimer = undefined;
+}
+// Preview brewing only. Purchases and money remain server-confirmed.
+const previewActions = new Set(["cup", "pour", "top", "flavor", "sugar", "ice", "seal", "trash"]);
+function project(state: State, actions: Action[]) {
+  for (const action of actions) {
+    if (action.type === "tick") continue;
+    if (!previewActions.has(action.type)) break;
+    state = reduce(state, action);
+  }
+  return state;
+}
+function projectGame() {
+  if (!confirmedGame) return;
+  const actions = inFlightAction ? [inFlightAction, ...queue] : queue;
+  const game = project(confirmedGame, actions);
+  if (game !== useGame.getState().game) useGame.setState({ game });
 }
 function enqueue(action: Action) {
   const { online, game } = useGame.getState();
   if (!online.active || online.status === "error") return;
-  if (action.type === "tick" && (game.phase !== "open" || game.paused)) return;
-  if (action.type === "tick" || action.type === "pour") {
-    // Frame events are coalesced: a pour carries its own server clock tick.
-    const last = queue[queue.length - 1];
-    if (last?.type === "tick" || last?.type === "pour") {
-      if (action.type === "pour" || last.type === "tick")
-        queue[queue.length - 1] = action;
-    } else if (Date.now() - lastClockSent >= 180) queue.push(action);
-  } else queue.push(action);
-  if (!pumpTimer && !pumping && queue.length)
+  const last = queue.at(-1);
+  if (action.type === "tick") {
+    if (game.phase !== "open" || game.paused || queue.length ||
+        Date.now() - lastClockSent < 180) return;
+    queue.push(action);
+  } else if (action.type === "pour" && last?.type === "pour" && last.tea === action.tea) {
+    last.dt = Math.min(1, last.dt + action.dt);
+  } else {
+    if (last?.type === "tick") queue[queue.length - 1] = action;
+    else queue.push(action);
+  }
+  if (previewActions.has(action.type)) projectGame();
+  if (!pumpTimer && !pumping)
     pumpTimer = setTimeout(() => {
       pumpTimer = undefined;
       void pump();
@@ -66,6 +89,7 @@ async function pump() {
   const current = useGame.getState();
   if (!current.online.active || current.online.status === "error") return;
   const action = queue.shift()!;
+  inFlightAction = action;
   startedRequests++;
   pumping = true;
   lastClockSent = Date.now();
@@ -78,9 +102,11 @@ async function pump() {
       throw Error(
         "Bản lưu trên máy chủ chưa tương thích. Cần cập nhật máy chủ game.",
       );
-    if (ticket === generation)
+    if (ticket === generation) {
+      inFlightAction = undefined;
+      confirmedGame = result.state;
       useGame.setState({
-        game: result.state,
+        game: project(result.state, queue),
         online: {
           ...current.online,
           revision: result.revision,
@@ -88,10 +114,13 @@ async function pump() {
           error: "",
         },
       });
+    }
   } catch (error) {
     if (ticket === generation) {
       queue = [];
       useGame.setState({
+        game: confirmedGame ?? current.game,
+        pourInput: null,
         online: {
           ...current.online,
           status: "error",
@@ -100,6 +129,7 @@ async function pump() {
       });
     }
   } finally {
+    inFlightAction = undefined;
     finishedRequests++;
     pumping = false;
     if (queue.length) void pump();
@@ -107,6 +137,7 @@ async function pump() {
 }
 export const useGame = create<Store>((set, get) => ({
   game: initial(),
+  pourInput: null,
   ready: false,
   error: "",
   online: localStatus(),
@@ -150,8 +181,10 @@ export const useGame = create<Store>((set, get) => ({
       if (ticket !== generation) throw Error("Đã hủy chuyển bản lưu.");
       if (getSession()?.user.id !== identity)
         throw Error("Tài khoản đã thay đổi. Vui lòng thử lại.");
+      confirmedGame = result.state;
       set({
         game: result.state,
+        pourInput: null,
         online: {
           active: true,
           status: "saved",
@@ -169,7 +202,8 @@ export const useGame = create<Store>((set, get) => ({
     switching = false;
     const guest = localSnapshot || (await load());
     localSnapshot = null;
-    set({ game: guest, online: localStatus() });
+    confirmedGame = null;
+    set({ game: guest, pourInput: null, online: localStatus() });
   },
   init: async () => {
     try {
@@ -234,6 +268,8 @@ if (typeof window !== "undefined") {
     if (online.active) {
       cancelQueue();
       useGame.setState({
+        game: confirmedGame ?? useGame.getState().game,
+        pourInput: null,
         online: {
           ...online,
           status: "error",
