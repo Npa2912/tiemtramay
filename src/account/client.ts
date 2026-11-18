@@ -40,6 +40,9 @@ async function request(path: string, init: RequestInit = {}, token = session?.ac
   if (!response.ok) {
     if (response.status === 409) throw Error("Tiến trình đã đổi trên thiết bị khác. Tải lại bản trên máy chủ trước khi tiếp tục.");
     if (response.status === 401 || response.status === 403) throw Error("Phiên đăng nhập không hợp lệ hoặc đã hết hạn. Vui lòng đăng nhập lại.");
+    if (path === "/functions/v1/game" && response.status === 400 && data?.error === "action") {
+      throw Error("Máy chủ chưa hỗ trợ thao tác này. Cần cập nhật Edge Function game trên Supabase.");
+    }
     const code = data?.error_code || data?.code;
     if (code === "invalid_credentials") throw Error("Email hoặc mật khẩu chưa đúng.");
     if (response.status === 429) throw Error("Bạn thao tác quá nhanh. Vui lòng thử lại sau.");

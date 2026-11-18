@@ -119,6 +119,8 @@ export default function App() {
     ),
     [tea, setTea] = useState("milk"),
     [notice, setNotice] = useState(""),
+    [repairPending, setRepairPending] = useState(false),
+    [repairError, setRepairError] = useState(""),
     [confirmReset, setConfirmReset] = useState(false);
   const [guest, setGuest] = useState(
     () => sessionStorage.getItem("may.guest") === "1",
@@ -228,6 +230,33 @@ export default function App() {
     if (dt > 0 && cupCanPour(game))
       act({ type: "pour", tea, dt });
   }
+  async function resolveMachine(type: "repairMachine" | "advanceRepair" | "useBackup") {
+    setRepairError("");
+    if (!online.active) {
+      act({ type });
+      return;
+    }
+    setRepairPending(true);
+    try {
+      act({ type });
+      await flushSave();
+    } catch (error) {
+      setRepairError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRepairPending(false);
+    }
+  }
+  async function reloadOnlineSave() {
+    setRepairPending(true);
+    setRepairError("");
+    try {
+      await useGame.getState().enterOnline();
+    } catch (error) {
+      setRepairError(error instanceof Error ? error.message : String(error));
+    } finally {
+      setRepairPending(false);
+    }
+  }
   function openPanel(p: Panel) {
     stopPour(false);
     setPanel(p);
@@ -312,22 +341,37 @@ export default function App() {
                 <>
                   <p>Sửa máy chính hoặc dùng máy dự phòng để tiếp tục.</p>
                   <button
-                    disabled={s.money < 50000}
-                    onClick={() => act({ type: "repairMachine" })}
+                    disabled={s.money < 50000 || repairPending || online.status === "error"}
+                    onClick={() => void resolveMachine("repairMachine")}
                   >
                     Sửa máy · 50.000đ
                   </button>
                   {securityActive(s, "backup") && (
-                    <button onClick={() => act({ type: "useBackup" })}>
+                    <button
+                      disabled={repairPending || online.status === "error"}
+                      onClick={() => void resolveMachine("useBackup")}
+                    >
                       Dùng máy dự phòng
                     </button>
                   )}
                   {s.money < 50000 && (
-                    <button onClick={() => act({ type: "advanceRepair" })}>
+                    <button
+                      disabled={repairPending || online.status === "error"}
+                      onClick={() => void resolveMachine("advanceRepair")}
+                    >
                       Ứng {money(Math.ceil(50000 - s.money))} & sửa máy
                     </button>
                   )}
                 </>
+              )}
+              {repairPending && <p role="status">Đang chờ máy chủ xác nhận…</p>}
+              {!repairPending && (repairError || online.error) && (
+                <p role="alert">{repairError || online.error}</p>
+              )}
+              {online.status === "error" && (
+                <button disabled={repairPending} onClick={() => void reloadOnlineSave()}>
+                  Tải lại tiến trình online
+                </button>
               )}
               {s.paused && (
                 <button onClick={() => act({ type: "pause" })}>

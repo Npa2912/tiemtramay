@@ -56,6 +56,20 @@ describe("cloud authority boundary (mock service)", () => {
     expect(response.status).toBe(400);
     expect(calls.some((call) => call.url.endsWith("rpc/commit_may_action"))).toBe(false);
   });
+  it("advances the server-calculated shortfall and resumes the same shift", async () => {
+    const bot = new Bot().stock().act({ type: "open" }).act({ type: "cup", size: "M" });
+    bot.state.money = 30000;
+    bot.state.incidents!.machineBroken = true;
+    current = { state: bot.state, revision: 1, updated_at: new Date().toISOString() };
+    const response = await invoke({ action: { type: "advanceRepair" }, revision: 1, requestId });
+    expect(response.status).toBe(200);
+    const { state } = await response.json();
+    expect(state.money).toBe(0);
+    expect(state.debt).toBe(20000);
+    expect(state.incidents.machineBroken).toBe(false);
+    expect(state.phase).toBe("open");
+    expect(state.cup).toEqual(bot.state.cup);
+  });
   it("uses elapsed server time for pouring instead of the client dt", async () => {
     const bot = new Bot().stock().act({ type: "open" }).act({ type: "cup", size: "M" });
     current = { state: bot.state, revision: 1, updated_at: new Date(Date.now() - 200).toISOString() };

@@ -8,7 +8,7 @@ interface User {
   state: State;
   revision: number;
 }
-function service(options: { startingState?: State; brewingDelayMs?: number } = {}) {
+function service(options: { startingState?: State; brewingDelayMs?: number; advanceSupported?: () => boolean } = {}) {
   const users = new Map<string, User>();
   const tokens = new Map<string, User>();
   async function install(context: BrowserContext) {
@@ -70,6 +70,8 @@ function service(options: { startingState?: State; brewingDelayMs?: number } = {
       }
       if (url.pathname === "/functions/v1/game") {
         if (body.action) {
+          if (body.action.type === "advanceRepair" && options.advanceSupported?.() === false)
+            return reply({ error: "action" }, 400);
           if (options.brewingDelayMs && ["cup", "pour", "top", "seal"].includes(body.action.type)) {
             await new Promise((resolve) => setTimeout(resolve, options.brewingDelayMs));
           }
@@ -185,6 +187,36 @@ test("online controls react before a slow save confirms the brew", async ({ page
   await expect.poll(() => saved.state.cup?.sealed).toBe(true);
   expect(await page.getByTestId("fill").innerText()).toBe(fill);
   expect(await page.getByRole("button", { name: "Giao cho khách" }).isEnabled()).toBe(true);
+});
+test("repair dialog reports an outdated server and can recover without charging twice", async ({ page, context }) => {
+  const startingState = initial(4271);
+  startingState.money = 30000;
+  startingState.incidents!.machineBroken = true;
+  let deployed = false;
+  const backend = service({ startingState, advanceSupported: () => deployed });
+  await backend.install(context);
+  await page.goto("/");
+  await page.getByRole("button", { name: "Đăng ký ngay", exact: true }).click();
+  await page.getByLabel("Tên chủ quán").fill("Chủ Tiệm Test");
+  await page.getByLabel("Email").fill("repair@example.test");
+  await page.getByLabel("Mật khẩu", { exact: true }).fill("TiemTraMay123!");
+  await page.getByLabel("Xác nhận mật khẩu", { exact: true }).fill("TiemTraMay123!");
+  await page.getByRole("button", { name: "Tạo tài khoản", exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Sự cố thiết bị" });
+  const advance = dialog.getByRole("button", { name: "Ứng 20.000đ & sửa máy" });
+  await advance.click();
+  await expect(dialog.getByRole("alert")).toContainText("Cần cập nhật Edge Function game");
+  expect(backend.users.get("repair@example.test")!.state.debt).toBe(0);
+
+  deployed = true;
+  await dialog.getByRole("button", { name: "Tải lại tiến trình online" }).click();
+  await advance.click();
+  await expect(dialog).toHaveCount(0);
+  const { state } = backend.users.get("repair@example.test")!;
+  expect(state.money).toBe(0);
+  expect(state.debt).toBe(20000);
+  expect(state.incidents?.machineBroken).toBe(false);
 });
 test("account contract: failed cloud load never enters a guest game, and wrong login reports failure", async ({
   page,
