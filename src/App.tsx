@@ -1,14 +1,5 @@
-import {
-  lazy,
-  Suspense,
-  useEffect,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-const Counter = lazy(() =>
-  import("./Counter").then((module) => ({ default: module.Counter })),
-);
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { Counter } from "./Counter";
 import { BrewOptions } from "./BrewOptions";
 import { ProgressionPanel } from "./ProgressionPanel";
 import { AuthScreen } from "./account/AuthScreen";
@@ -34,6 +25,7 @@ import {
   quantity,
   missingOpeningSupplies,
   type Action,
+  type State,
 } from "./engine";
 import { parseSave, freshSeed } from "./persistence";
 import { effect, setMusic, setPouring } from "./audio";
@@ -104,6 +96,19 @@ function Icon({ name }: { name: string }) {
     </svg>
   );
 }
+function cupCanPour(game: State) {
+  const c = game.cup;
+  return (
+    game.phase === "open" &&
+    !game.paused &&
+    !productionBlocked(game) &&
+    !!c &&
+    !c.sealed &&
+    c.sealLeft === 0 &&
+    c.fill < 1.1
+  );
+}
+
 export default function App() {
   const { game: s, act, ready, error, online } = useGame();
   const [panel, setPanel] = useState<Panel>(
@@ -125,13 +130,14 @@ export default function App() {
     window.addEventListener("may-account-change", changed);
     return () => window.removeEventListener("may-account-change", changed);
   }, []);
-  const holding = useRef(false),
+  const pourSince = useRef<number | null>(null),
     last = useRef(0),
     file = useRef<HTMLInputElement>(null);
   const order = s.orders[0],
     r = order?.recipe,
     c = s.cup;
-  const missingSupplies = missingOpeningSupplies(s);
+  const missingSupplies =
+    s.phase === "open" && panel !== "kho" ? [] : missingOpeningSupplies(s);
   const actor = s.feedback?.customer ?? order?.customer;
   const mood =
     s.feedback?.mood ??
@@ -149,28 +155,26 @@ export default function App() {
   }, [s.sound]);
   useEffect(() => {
     let frame: number;
-    let prev = performance.now();
     function loop(now: number) {
-      const dt = Math.min(0.15, (now - prev) / 1000);
-      prev = now;
       if (now - last.current >= 70) {
         useGame
           .getState()
           .act({ type: "tick", dt: (now - last.current) / 1000 });
         last.current = now;
       }
-      const current = useGame.getState().game;
-      const canPour =
-        holding.current &&
-        current.sound &&
-        !current.paused &&
-        !productionBlocked(current) &&
-        !!current.cup &&
-        !current.cup.sealed &&
-        current.cup.sealLeft === 0 &&
-        current.cup.fill < 1.1;
-      setPouring(canPour);
-      if (holding.current) useGame.getState().act({ type: "pour", tea, dt });
+      const began = pourSince.current;
+      if (began !== null) {
+        const { game, online, act } = useGame.getState();
+        const canPour = cupCanPour(game);
+        setPouring(canPour && game.sound);
+        // The local reducer runs at most 30 times per second while held.
+        const elapsed = now - began;
+        if (elapsed > 0 && (online.active || elapsed >= 1000 / 30)) {
+          pourSince.current = now;
+          if (canPour)
+            act({ type: "pour", tea, dt: Math.min(0.15, elapsed / 1000) });
+        }
+      }
       frame = requestAnimationFrame(loop);
     }
     frame = requestAnimationFrame(loop);
@@ -181,7 +185,7 @@ export default function App() {
   }, [tea]);
   useEffect(() => {
     function stop() {
-      holding.current = false;
+      pourSince.current = null;
       setPouring(false);
     }
     function hidden() {
@@ -201,8 +205,18 @@ export default function App() {
       window.removeEventListener("pagehide", hidden);
     };
   }, []);
+  function stopPour(commit: boolean) {
+    const began = pourSince.current;
+    pourSince.current = null;
+    setPouring(false);
+    if (began === null || !commit) return;
+    const { game, online, act } = useGame.getState();
+    const dt = Math.min(0.15, (performance.now() - began) / 1000);
+    if (!online.active && dt > 0 && cupCanPour(game))
+      act({ type: "pour", tea, dt });
+  }
   function openPanel(p: Panel) {
-    holding.current = false;
+    stopPour(false);
     setPanel(p);
     if (s.phase === "open" && !s.paused) act({ type: "pause" });
   }
@@ -360,7 +374,7 @@ export default function App() {
             className="icon-button"
             aria-label="Tạm dừng"
             onClick={() => {
-              holding.current = false;
+              stopPour(false);
               act({ type: "pause" });
             }}
           >
@@ -560,13 +574,7 @@ export default function App() {
           </section>
           <div className="stage">
             <h2 className="section-label">🧋 Pha chế đồ uống</h2>
-            <Suspense
-              fallback={
-                <div className="counter-loading">Mây đang chuẩn bị quầy…</div>
-              }
-            >
-              <Counter />
-            </Suspense>
+            <Counter />
             <div className="cup-stack">
               <span>CHỌN LY</span>
               <button
@@ -599,30 +607,22 @@ export default function App() {
               }
               onPointerDown={(e) => {
                 e.currentTarget.setPointerCapture(e.pointerId);
-                holding.current = true;
+                pourSince.current ??= performance.now();
                 if (s.sound) effect("pour");
               }}
-              onPointerUp={() => {
-                holding.current = false;
-              }}
-              onPointerCancel={() => {
-                holding.current = false;
-              }}
-              onLostPointerCapture={() => {
-                holding.current = false;
-              }}
+              onPointerUp={() => stopPour(true)}
+              onPointerCancel={() => stopPour(false)}
+              onLostPointerCapture={() => stopPour(false)}
               onKeyDown={(e) => {
                 if (e.code === "Space" || e.code === "Enter") {
                   e.preventDefault();
-                  holding.current = true;
+                  pourSince.current ??= performance.now();
                 }
               }}
-              onKeyUp={() => {
-                holding.current = false;
+              onKeyUp={(e) => {
+                if (e.code === "Space" || e.code === "Enter") stopPour(true);
               }}
-              onBlur={() => {
-                holding.current = false;
-              }}
+              onBlur={() => stopPour(false)}
             >
               Giữ để rót <span>{label(tea)}</span>
             </button>
